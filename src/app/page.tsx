@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Volume2 } from "lucide-react";
+import { signOut } from "@/lib/auth";
+import { getOptionalAuth } from "@/lib/auth/session";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const session = await getOptionalAuth();
+  const isLoggedIn = Boolean(session?.user?.id);
+
   return (
     <div className="min-h-screen">
       <header className="border-b">
@@ -15,12 +20,33 @@ export default function HomePage() {
             <Button variant="ghost" asChild>
               <Link href="/explore">Explore</Link>
             </Button>
-            <Button variant="ghost" asChild>
-              <Link href="/login">Log in</Link>
-            </Button>
-            <Button asChild>
-              <Link href="/register">Get started</Link>
-            </Button>
+            {isLoggedIn ? (
+              <>
+                <span className="hidden text-sm text-muted-foreground sm:inline">{session.user?.name}</span>
+                <Button variant="ghost" asChild>
+                  <Link href="/dashboard">Dashboard</Link>
+                </Button>
+                <form
+                  action={async () => {
+                    "use server";
+                    await signOut({ redirectTo: "/" });
+                  }}
+                >
+                  <Button variant="outline" type="submit">
+                    Sign out
+                  </Button>
+                </form>
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" asChild>
+                  <Link href="/login">Log in</Link>
+                </Button>
+                <Button asChild>
+                  <Link href="/register">Get started</Link>
+                </Button>
+              </>
+            )}
           </nav>
         </div>
       </header>
@@ -34,12 +60,25 @@ export default function HomePage() {
             Upload clips, organize them into soundboards, assign hotkeys, and share with the world — or keep them private.
           </p>
           <div className="mt-10 flex justify-center gap-4">
-            <Button size="lg" asChild>
-              <Link href="/register">Create your soundboard</Link>
-            </Button>
-            <Button size="lg" variant="outline" asChild>
-              <Link href="/explore">Browse public boards</Link>
-            </Button>
+            {isLoggedIn ? (
+              <>
+                <Button size="lg" asChild>
+                  <Link href="/dashboard">Go to dashboard</Link>
+                </Button>
+                <Button size="lg" variant="outline" asChild>
+                  <Link href="/explore">Browse public boards</Link>
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button size="lg" asChild>
+                  <Link href="/register">Create your soundboard</Link>
+                </Button>
+                <Button size="lg" variant="outline" asChild>
+                  <Link href="/explore">Browse public boards</Link>
+                </Button>
+              </>
+            )}
           </div>
         </div>
 

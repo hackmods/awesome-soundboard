@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,11 +21,18 @@ export function BoardSettings({ board, shareUrl }: BoardSettingsProps) {
   const [visibility, setVisibility] = useState(board.visibility);
   const canShare = visibility !== "private";
 
+  useEffect(() => {
+    setVisibility(board.visibility);
+  }, [board.visibility, board.updatedAt]);
+
   return (
     <div id="settings" className="space-y-4 rounded-lg border bg-card p-4">
       <h2 className="font-semibold">Board settings</h2>
       <form
-        action={async (formData) => {
+        key={board.updatedAt}
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const formData = new FormData(e.currentTarget);
           formData.set("visibility", visibility);
           await updateBoardAction(board.id, formData);
           router.refresh();
@@ -44,6 +51,7 @@ export function BoardSettings({ board, shareUrl }: BoardSettingsProps) {
           <Label htmlFor="visibility">Visibility</Label>
           <select
             id="visibility"
+            name="visibility"
             value={visibility}
             onChange={(e) => setVisibility(e.target.value as typeof visibility)}
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
