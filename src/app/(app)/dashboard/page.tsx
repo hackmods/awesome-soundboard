@@ -6,7 +6,7 @@ import { CreateBoardForm } from "@/components/soundboard/create-board-form";
 import { BoardCard } from "@/components/soundboard/board-card";
 
 export default async function DashboardPage() {
-  migrate();
+  await migrate();
   const session = await requireAuth();
   const boards = await getSoundboardsByUserId(session.user.id);
 

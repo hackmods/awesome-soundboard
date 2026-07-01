@@ -14,7 +14,6 @@ import {
   deleteCategory,
   updateClip,
   deleteClip,
-  getClipById,
   getHotkeyConflicts,
 } from "@/lib/db/queries";
 import { newId, resolveClipAbsolutePath } from "@/lib/storage/files";
@@ -23,7 +22,7 @@ import { unlink } from "fs/promises";
 import { migrate } from "@/lib/db/migrate";
 
 async function ensureOwner(boardId: string) {
-  migrate();
+  await migrate();
   const session = await requireAuth();
   const board = await getSoundboardById(boardId);
   if (!board || board.userId !== session.user.id) {
@@ -33,7 +32,7 @@ async function ensureOwner(boardId: string) {
 }
 
 async function uniqueSlug(base: string, excludeId?: string): Promise<string> {
-  let slug = slugify(base) || "board";
+  const slug = slugify(base) || "board";
   let attempt = slug;
   let i = 1;
   while (await slugExists(attempt, excludeId)) {
@@ -51,7 +50,7 @@ const boardSchema = z.object({
 
 export async function createBoardAction(formData: FormData) {
   const session = await requireAuth();
-  migrate();
+  await migrate();
 
   const parsed = boardSchema.safeParse({
     name: formData.get("name"),

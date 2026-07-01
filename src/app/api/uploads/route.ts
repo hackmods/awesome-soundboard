@@ -18,7 +18,7 @@ import { newId } from "@/lib/id";
 import { migrate } from "@/lib/db/migrate";
 
 export async function POST(req: NextRequest) {
-  migrate();
+  await migrate();
 
   const session = await auth();
   if (!session?.user?.id) {

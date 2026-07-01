@@ -7,7 +7,7 @@ import { getShareUrl } from "@/lib/utils";
 import { migrate } from "@/lib/db/migrate";
 
 export default async function BoardPage({ params }: { params: Promise<{ id: string }> }) {
-  migrate();
+  await migrate();
   const { id } = await params;
   const session = await requireAuth();
   const data = await getSoundboardWithClips(id);

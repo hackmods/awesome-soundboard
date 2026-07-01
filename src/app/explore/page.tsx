@@ -6,7 +6,7 @@ import { getPublicSoundboards } from "@/lib/db/queries";
 import { migrate } from "@/lib/db/migrate";
 
 export default async function ExplorePage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
-  migrate();
+  await migrate();
   const params = await searchParams;
   const page = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
   const boards = await getPublicSoundboards(page);

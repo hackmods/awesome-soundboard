@@ -2,12 +2,12 @@ import { getDb } from "./index";
 import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
 
-export function migrate() {
+export async function migrate() {
   const db = getDb();
-  const exists = db.$client
-    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
-    .get();
-  if (exists) return;
+  const existing = await db.$client.execute(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='users'"
+  );
+  if (existing.rows.length > 0) return;
 
   const migrationsDir = join(process.cwd(), "drizzle");
   const files = readdirSync(migrationsDir)
@@ -22,7 +22,7 @@ export function migrate() {
       .filter(Boolean);
 
     for (const statement of statements) {
-      db.$client.exec(statement);
+      await db.$client.execute(statement);
     }
   }
 
@@ -30,5 +30,8 @@ export function migrate() {
 }
 
 if (require.main === module) {
-  migrate();
+  migrate().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
 }

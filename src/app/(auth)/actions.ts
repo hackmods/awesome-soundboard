@@ -13,8 +13,8 @@ const registerSchema = z.object({
   displayName: z.string().min(1).max(50),
 });
 
-export async function registerAction(formData: FormData) {
-  migrate();
+export async function registerAction(formData: FormData): Promise<void> {
+  await migrate();
 
   const parsed = registerSchema.safeParse({
     email: formData.get("email"),
@@ -23,12 +23,12 @@ export async function registerAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    return { error: "Invalid form data." };
+    throw new Error("Invalid form data.");
   }
 
   const existing = await getUserByEmail(parsed.data.email);
   if (existing) {
-    return { error: "An account with this email already exists." };
+    throw new Error("An account with this email already exists.");
   }
 
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);

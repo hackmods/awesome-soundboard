@@ -9,7 +9,7 @@ import { getOptionalAuth } from "@/lib/auth/session";
 import { migrate } from "@/lib/db/migrate";
 
 export default async function SharedBoardPage({ params }: { params: Promise<{ slug: string }> }) {
-  migrate();
+  await migrate();
   const { slug } = await params;
   const session = await getOptionalAuth();
   const board = await getSoundboardBySlug(slug);
