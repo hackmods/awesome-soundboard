@@ -1,0 +1,175 @@
+---
+description: Awesome Soundboard — full project architecture, conventions, and known pitfalls
+alwaysApply: true
+---
+
+# Awesome Soundboard
+
+Self-hosted Next.js soundboard app. Users upload audio clips, organize them into boards, play via hotkeys, and share with private / unlisted / public visibility.
+
+**Repo:** `hackmods/awesome-soundboard` · **Node:** 20+ · **Primary run path:** Docker (`docker compose up --build`)
+
+## Stack
+
+| Layer | Choice |
+|-------|--------|
+| Framework | Next.js 15 App Router, TypeScript, Tailwind |
+| UI | shadcn-style Radix components in `src/components/ui/` |
+| Auth | Auth.js v5 (next-auth), email/password, JWT sessions, bcryptjs |
+| DB | SQLite via Drizzle ORM + `@libsql/client` (not better-sqlite3) |
+| Audio playback | Howler.js — **lazy-import only** (`src/lib/audio/manager.ts`) |
+| Waveforms | wavesurfer.js — **lazy-import only** (`waveform-preview.tsx`) |
+| Local cache | Dexie.js IndexedDB (`src/lib/sync/cache.ts`) |
+| Deploy | Docker (`node:20-slim`), `docker-compose.yml`, optional IIS reverse proxy |
+
+## Directory map
+
+```
+src/
+  app/
+    page.tsx                    # Public home (auth-aware nav)
+    (app)/                      # Protected routes (middleware)
+      dashboard/page.tsx
+      boards/[id]/page.tsx
+      settings/page.tsx
+      actions.ts                # Server actions: board/clip/category CRUD
+    (auth)/                     # login, register + auth actions
+    s/[slug]/page.tsx           # Shared player (visibility-gated)
+    explore/page.tsx            # Public gallery
+    api/
+      auth/[...nextauth]/route.ts
+      uploads/route.ts          # Clip upload (multipart)
+      clips/[clipId]/audio/route.ts  # Stream + range requests
+      health/route.ts
+  components/
+    soundboard/                 # Board editor, grid, clips, settings
+    upload/drop-zone.tsx
+    layout/app-header.tsx
+    settings/settings-client.tsx
+  hooks/                        # useAudioPlayer, useHotkeys, useOfflineSync
+  lib/
+    auth/                       # NextAuth config + session helpers
+    db/                         # schema, queries, migrate, serialize
+    audio/manager.ts            # Singleton audio manager
+    sync/cache.ts               # Dexie clip cache + offline upload queue
+    storage/files.ts            # Disk paths for uploads
+drizzle/                        # SQL migrations
+data/                           # SQLite DB + uploads (gitignored, Docker volume)
+PLAN.md                         # Original implementation plan — do not edit unless asked
+```
+
+## Routes & access
+
+| Route | Auth | Purpose |
+|-------|------|---------|
+| `/` | Optional | Landing; shows dashboard link when logged in |
+| `/login`, `/register` | Redirect if authed | Account auth |
+| `/dashboard` | Required | User's boards |
+| `/boards/[id]` | Owner only | Board editor |
+| `/s/[slug]` | Optional | Shared player; private boards need owner session |
+| `/explore` | Public | Public boards gallery |
+| `/settings` | Required | Clear local IndexedDB cache |
+
+Middleware (`src/middleware.ts`) protects `/dashboard`, `/boards`, `/settings`.
+
+## Data model (Drizzle)
+
+- **users** — email, passwordHash, displayName
+- **soundboards** — name, slug (unique), visibility (`private` \| `unlisted` \| `public`), description
+- **categories** — per-board, sortOrder
+- **clips** — filePath, mimeType, durationSec, volume, hotkey, loop, sortOrder, categoryId
+
+Migrations run via `src/lib/db/migrate.ts` (called from pages, instrumentation, and server actions).
+
+## Server → client data boundary
+
+**Always serialize before passing DB records to client components.**
+
+```typescript
+// src/lib/db/serialize.ts
+serializeBoardForClient(board)  // Dates → ISO strings, loop → boolean
+```
+
+Types: `ClientSoundboard`, `ClientClip`, `BoardWithClipsClient`. Import `Category` as type-only from schema in client components.
+
+## Board editor architecture
+
+- Server pages fetch data → `serializeBoardForClient()` → pass props to `BoardEditor`
+- `board-editor-dynamic.tsx` wraps the editor with `dynamic(..., { ssr: false })` and **`"use client"`** (required)
+- Never top-level import Howler or WaveSurfer in modules loaded by the editor tree
+
+### Audio manager (`src/lib/audio/manager.ts`)
+
+- Singleton via `getAudioManager()`
+- Lazy `import("howler")` on first use
+- `getPlayingIds()` must return a **stable array reference** when IDs unchanged (required for `useSyncExternalStore` in `useAudioPlayer`)
+
+## Server actions
+
+- `src/app/(app)/actions.ts` — board, category, clip CRUD; calls `ensureOwner()` + `revalidatePath`
+- `src/app/(auth)/actions.ts` — register (throws on error)
+- Auth actions use `"use server"`; client components import them directly
+
+## Uploads & audio streaming
+
+- Uploads: `POST /api/uploads` → disk at `UPLOAD_DIR/{userId}/{clipId}.ext`
+- Playback: `GET /api/clips/[clipId]/audio` with range-request support
+- Access: owner always; unlisted/public boards allow anonymous stream
+
+## Offline / local-first
+
+- `src/lib/sync/cache.ts` — Dexie stores clip blobs + upload queue
+- `useOfflineSync` — syncs queued uploads when back online
+- `fetchAndCacheClip()` — IndexedDB first, then network
+
+## Environment
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `AUTH_SECRET` | required | `openssl rand -base64 32` |
+| `NEXTAUTH_URL` | `http://localhost:3000` | Used in share URLs |
+| `DATABASE_URL` | `file:./data/app.db` | Docker: `file:/app/data/app.db` |
+| `UPLOAD_DIR` | `./data/uploads` | Docker: `/app/data/uploads` |
+| `MAX_UPLOAD_BYTES` | 10485760 | 10 MB |
+
+## Docker
+
+```bash
+cp .env.example .env   # set AUTH_SECRET
+docker compose up --build -d
+```
+
+- Base image: `node:20-slim` (Debian, not Alpine — avoids native compile hangs)
+- `package-lock.json` required for fast `npm ci`
+- Volume: `./data` → `/app/data` (DB + uploads persist)
+- Health: `GET /api/health`
+
+## UI patterns
+
+- Dark theme default (`layout.tsx`)
+- Board settings visibility: controlled `<select>` + sync state from `board.visibility` on `board.updatedAt` change; use `onSubmit` not form `action` for save
+- Clip grid: `@dnd-kit` reorder, category tabs, search filter
+- Hotkeys: `useHotkeys` + per-clip bindings; disabled while edit dialog open
+
+## Known pitfalls (do not reintroduce)
+
+1. **Date objects in client props** → RSC serialization crash; use `serializeBoardForClient`
+2. **Top-level Howler/WaveSurfer imports** → client crash; lazy-import in browser only
+3. **`dynamic({ ssr: false })` without `"use client"`** → build fails
+4. **`getPlayingIds()` returning new `[]` each call** → infinite re-render via `useSyncExternalStore`
+5. **Visibility dropdown stale after save** → sync state from `board` prop; key form on `board.updatedAt`
+6. **`better-sqlite3` on Alpine** → Docker build hangs; use `@libsql/client`
+7. **Local Node 14** → too old; use Node 20+ or Docker
+
+## Build warnings (non-fatal)
+
+Edge runtime warnings for bcryptjs, fs/path in auth middleware import chain — build succeeds.
+
+## Commands
+
+```bash
+npm run dev          # Node 20+, turbopack
+npm run build
+npm run db:migrate
+npm run db:generate
+```
