@@ -22,10 +22,11 @@ import {
 } from "@/components/ui/select";
 import { WaveformPreview } from "@/components/soundboard/waveform-preview";
 import { updateClipAction, deleteClipAction } from "@/app/(app)/actions";
-import type { Clip, Category } from "@/lib/db/schema";
+import type { ClientClip } from "@/lib/db/serialize";
+import type { Category } from "@/lib/db/schema";
 
 type ClipEditDialogProps = {
-  clip: Clip | null;
+  clip: ClientClip | null;
   boardId: string;
   categories: Category[];
   open: boolean;

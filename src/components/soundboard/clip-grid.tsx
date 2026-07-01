@@ -18,7 +18,8 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { Clip, Category } from "@/lib/db/schema";
+import type { ClientClip } from "@/lib/db/serialize";
+import type { Category } from "@/lib/db/schema";
 import { ClipButton } from "./clip-button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -30,7 +31,7 @@ function SortableClip({
   onPlay,
   onEdit,
 }: {
-  clip: Clip;
+  clip: ClientClip;
   isPlaying: boolean;
   editable?: boolean;
   onPlay: () => void;
@@ -54,12 +55,12 @@ function SortableClip({
 }
 
 type ClipGridProps = {
-  clips: Clip[];
+  clips: ClientClip[];
   categories: Category[];
   playingIds: string[];
   editable?: boolean;
-  onPlay: (clip: Clip) => void;
-  onEdit?: (clip: Clip) => void;
+  onPlay: (clip: ClientClip) => void;
+  onEdit?: (clip: ClientClip) => void;
   onReorder?: (orderedIds: string[]) => void;
   search?: string;
   onSearchChange?: (value: string) => void;

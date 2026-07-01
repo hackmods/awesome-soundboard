@@ -4,10 +4,10 @@ import { useMemo } from "react";
 import { cn, formatDuration } from "@/lib/utils";
 import { WaveformPreview } from "./waveform-preview";
 import { Volume2, Square } from "lucide-react";
-import type { Clip } from "@/lib/db/schema";
+import type { ClientClip } from "@/lib/db/serialize";
 
 type ClipButtonProps = {
-  clip: Clip;
+  clip: ClientClip;
   isPlaying: boolean;
   editable?: boolean;
   onPlay: () => void;
@@ -58,8 +58,8 @@ export function ClipButton({ clip, isPlaying, editable, onPlay, onEdit }: ClipBu
 }
 
 export function useHotkeyBindings(
-  clips: Clip[],
-  onPlay: (clip: Clip) => void
+  clips: ClientClip[],
+  onPlay: (clip: ClientClip) => void
 ): Record<string, () => void> {
   return useMemo(() => {
     const bindings: Record<string, () => void> = {};

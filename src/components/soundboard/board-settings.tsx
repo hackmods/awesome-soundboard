@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { updateBoardAction, createCategoryAction } from "@/app/(app)/actions";
-import type { Soundboard } from "@/lib/db/schema";
+import type { ClientSoundboard } from "@/lib/db/serialize";
 
 type BoardSettingsProps = {
-  board: Soundboard;
+  board: ClientSoundboard;
   shareUrl: string;
 };
 

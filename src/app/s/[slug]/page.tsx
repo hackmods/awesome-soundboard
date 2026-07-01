@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Volume2 } from "lucide-react";
-import { BoardEditor } from "@/components/soundboard/board-editor";
+import { BoardEditor } from "@/components/soundboard/board-editor-dynamic";
 import { Button } from "@/components/ui/button";
 import { getSoundboardBySlug, getSoundboardWithClips } from "@/lib/db/queries";
+import { serializeBoardForClient } from "@/lib/db/serialize";
 import { getShareUrl } from "@/lib/utils";
 import { getOptionalAuth } from "@/lib/auth/session";
 import { migrate } from "@/lib/db/migrate";
@@ -27,6 +28,7 @@ export default async function SharedBoardPage({ params }: { params: Promise<{ sl
   const data = await getSoundboardWithClips(board.id);
   if (!data) notFound();
 
+  const boardData = serializeBoardForClient(data);
   const isOwner = session?.user?.id === board.userId;
 
   return (
@@ -59,10 +61,10 @@ export default async function SharedBoardPage({ params }: { params: Promise<{ sl
       </header>
       <main className="container mx-auto px-4 py-8">
         <BoardEditor
-          board={data}
-          clips={data.clips}
-          categories={data.categories}
-          shareUrl={getShareUrl(data.slug)}
+          board={boardData}
+          clips={boardData.clips}
+          categories={boardData.categories}
+          shareUrl={getShareUrl(boardData.slug)}
           editable={false}
         />
       </main>

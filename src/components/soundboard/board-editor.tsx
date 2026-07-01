@@ -13,11 +13,12 @@ import { useHotkeyBindings } from "@/components/soundboard/clip-button";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
 import { BoardSettings } from "@/components/soundboard/board-settings";
 import { reorderClipsAction } from "@/app/(app)/actions";
-import type { Soundboard, Clip, Category } from "@/lib/db/schema";
+import type { ClientClip, ClientSoundboard } from "@/lib/db/serialize";
+import type { Category } from "@/lib/db/schema";
 
 type BoardEditorProps = {
-  board: Soundboard;
-  clips: Clip[];
+  board: ClientSoundboard;
+  clips: ClientClip[];
   categories: Category[];
   shareUrl: string;
   editable?: boolean;
@@ -26,12 +27,12 @@ type BoardEditorProps = {
 export function BoardEditor({ board, clips, categories, shareUrl, editable = true }: BoardEditorProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [editingClip, setEditingClip] = useState<Clip | null>(null);
+  const [editingClip, setEditingClip] = useState<ClientClip | null>(null);
   const { play, stopAll, playingIds, unlocked, unlock } = useAudioPlayer(board.id);
   const { queuedCount, online, sync, syncing } = useOfflineSync(() => router.refresh());
 
   const handlePlay = useCallback(
-    (clip: Clip) => {
+    (clip: ClientClip) => {
       if (!unlocked) unlock();
       play({
         id: clip.id,

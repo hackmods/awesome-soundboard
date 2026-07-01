@@ -1,5 +1,3 @@
-import { Howl } from "howler";
-
 export type ClipPlaybackConfig = {
   id: string;
   src: string;
@@ -7,8 +5,11 @@ export type ClipPlaybackConfig = {
   loop: boolean;
 };
 
+type HowlerModule = typeof import("howler");
+type HowlInstance = InstanceType<HowlerModule["Howl"]>;
+
 type PlayState = {
-  howl: Howl;
+  howl: HowlInstance;
   clipId: string;
 };
 
@@ -16,6 +17,15 @@ class AudioManager {
   private active = new Map<string, PlayState>();
   private unlocked = false;
   private listeners = new Set<() => void>();
+  private howlerPromise: Promise<HowlerModule> | null = null;
+  private playingIdsSnapshot: string[] = [];
+
+  private loadHowler() {
+    if (!this.howlerPromise) {
+      this.howlerPromise = import("howler");
+    }
+    return this.howlerPromise;
+  }
 
   subscribe(listener: () => void) {
     this.listeners.add(listener);
@@ -28,10 +38,11 @@ class AudioManager {
     this.listeners.forEach((l) => l());
   }
 
-  unlock() {
+  async unlock() {
     if (this.unlocked) return;
+    const { Howler } = await this.loadHowler();
     if (Howler.ctx && Howler.ctx.state === "suspended") {
-      Howler.ctx.resume();
+      await Howler.ctx.resume();
     }
     this.unlocked = true;
     this.notify();
@@ -47,13 +58,24 @@ class AudioManager {
   }
 
   getPlayingIds(): string[] {
-    return Array.from(this.active.entries())
+    const ids = Array.from(this.active.entries())
       .filter(([, s]) => s.howl.playing())
       .map(([id]) => id);
+
+    if (
+      ids.length === this.playingIdsSnapshot.length &&
+      ids.every((id, index) => id === this.playingIdsSnapshot[index])
+    ) {
+      return this.playingIdsSnapshot;
+    }
+
+    this.playingIdsSnapshot = ids;
+    return this.playingIdsSnapshot;
   }
 
   async play(config: ClipPlaybackConfig): Promise<void> {
-    this.unlock();
+    await this.unlock();
+    const { Howl } = await this.loadHowler();
 
     const existing = this.active.get(config.id);
     if (existing?.howl.playing()) {
@@ -104,7 +126,14 @@ class AudioManager {
   }
 }
 
-export const audioManager = typeof window !== "undefined" ? new AudioManager() : (null as unknown as AudioManager);
+let audioManager: AudioManager | null = null;
+
+export function getAudioManager(): AudioManager {
+  if (!audioManager) {
+    audioManager = new AudioManager();
+  }
+  return audioManager;
+}
 
 export function getClipAudioUrl(clipId: string): string {
   return `/api/clips/${clipId}/audio`;

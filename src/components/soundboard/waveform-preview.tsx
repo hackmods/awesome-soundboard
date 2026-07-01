@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import WaveSurfer from "wavesurfer.js";
+import type WaveSurfer from "wavesurfer.js";
 import { cn } from "@/lib/utils";
 
 export function WaveformPreview({
@@ -19,23 +19,31 @@ export function WaveformPreview({
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const ws = WaveSurfer.create({
-      container: containerRef.current,
-      height,
-      waveColor: "hsl(262 83% 58% / 0.4)",
-      progressColor: "hsl(262 83% 58%)",
-      cursorWidth: 0,
-      interact: false,
-      barWidth: 2,
-      barGap: 1,
-      normalize: true,
+    let cancelled = false;
+
+    void import("wavesurfer.js").then((module) => {
+      if (cancelled || !containerRef.current) return;
+
+      const WaveSurfer = module.default;
+      const ws = WaveSurfer.create({
+        container: containerRef.current,
+        height,
+        waveColor: "hsl(262 83% 58% / 0.4)",
+        progressColor: "hsl(262 83% 58%)",
+        cursorWidth: 0,
+        interact: false,
+        barWidth: 2,
+        barGap: 1,
+        normalize: true,
+      });
+
+      ws.load(`/api/clips/${clipId}/audio`);
+      wsRef.current = ws;
     });
 
-    ws.load(`/api/clips/${clipId}/audio`);
-    wsRef.current = ws;
-
     return () => {
-      ws.destroy();
+      cancelled = true;
+      wsRef.current?.destroy();
       wsRef.current = null;
     };
   }, [clipId, height]);

@@ -1,26 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { audioManager, getClipAudioUrl, type ClipPlaybackConfig } from "@/lib/audio/manager";
+import { getAudioManager, getClipAudioUrl, type ClipPlaybackConfig } from "@/lib/audio/manager";
 import { fetchAndCacheClip } from "@/lib/sync/cache";
 
 export function useAudioPlayer(boardId: string) {
   const playingIds = useSyncExternalStore(
-    (cb) => audioManager.subscribe(cb),
-    () => audioManager.getPlayingIds(),
+    (cb) => getAudioManager().subscribe(cb),
+    () => getAudioManager().getPlayingIds(),
     () => [] as string[]
   );
 
   const [unlocked, setUnlocked] = useState(false);
 
   useEffect(() => {
-    setUnlocked(audioManager.isUnlocked());
-    return audioManager.subscribe(() => setUnlocked(audioManager.isUnlocked()));
+    const manager = getAudioManager();
+    setUnlocked(manager.isUnlocked());
+    return manager.subscribe(() => setUnlocked(manager.isUnlocked()));
   }, []);
 
   const unlock = useCallback(() => {
-    audioManager.unlock();
-    setUnlocked(true);
+    void getAudioManager().unlock().then(() => setUnlocked(true));
   }, []);
 
   const play = useCallback(
@@ -36,20 +36,20 @@ export function useAudioPlayer(boardId: string) {
         src = getClipAudioUrl(config.id);
       }
 
-      await audioManager.play({ ...config, src });
+      await getAudioManager().play({ ...config, src });
     },
     [boardId]
   );
 
   const stop = useCallback((clipId: string) => {
-    audioManager.stop(clipId);
+    getAudioManager().stop(clipId);
   }, []);
 
   const stopAll = useCallback(() => {
-    audioManager.stopAll();
+    getAudioManager().stopAll();
   }, []);
 
-  const isPlaying = useCallback((clipId: string) => audioManager.isPlaying(clipId), []);
+  const isPlaying = useCallback((clipId: string) => getAudioManager().isPlaying(clipId), []);
 
   return { play, stop, stopAll, isPlaying, playingIds, unlocked, unlock };
 }
