@@ -172,4 +172,10 @@ npm run dev          # Node 20+, turbopack
 npm run build
 npm run db:migrate
 npm run db:generate
+npm run test         # unit + integration (see testing.mdc)
+npm run test:all     # includes Playwright e2e
 ```
+
+## Testing
+
+See [`.cursor/rules/testing.mdc`](.cursor/rules/testing.mdc) for when to run tests, regression checklist, and how to add new tests.

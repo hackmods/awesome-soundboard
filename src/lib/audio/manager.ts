@@ -138,3 +138,7 @@ export function getAudioManager(): AudioManager {
 export function getClipAudioUrl(clipId: string): string {
   return `/api/clips/${clipId}/audio`;
 }
+
+export function resetAudioManagerForTests() {
+  audioManager = null;
+}

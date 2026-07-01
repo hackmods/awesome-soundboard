@@ -1,0 +1,70 @@
+---
+description: When and how to run automated tests for Awesome Soundboard
+alwaysApply: true
+---
+
+# Testing — Awesome Soundboard
+
+Local automated tests for Cursor to run after major changes. No CI yet — run these commands in the dev environment (Node 20+).
+
+## Commands
+
+| Command | Scope | When to run |
+|---------|-------|-------------|
+| `npm run test` | Unit + integration | After `src/lib/`, API routes, server actions, or DB changes |
+| `npm run test:unit` | Pure logic only | Quick check on utils, serialize, files, audio manager |
+| `npm run test:integration` | DB + route handlers | After queries, migrations, upload/audio APIs |
+| `npm run test:e2e` | Browser smoke tests | After board editor, auth, upload, or visibility UI changes |
+| `npm run test:all` | Everything | Before considering a feature complete |
+| `npm run build` | Production build | After dependency, Docker, or Next.js config changes |
+
+Optional coverage: `npx vitest run --coverage`
+
+## Test layout
+
+```
+tests/
+  unit/           # Vitest — no DB, fast
+  integration/    # Vitest — temp SQLite + mocked auth
+  helpers/        # db reset, fixtures, audio samples
+  fixtures/       # sample.mp3 for upload tests
+e2e/              # Playwright smoke specs
+```
+
+New tests: `tests/unit/foo.test.ts` or `tests/integration/foo.test.ts` or `e2e/foo.spec.ts`.
+
+Prefer testing pure logic first; add integration for DB/API; add E2E only for full user flows.
+
+## Regression checklist (must stay covered)
+
+| Area | Layer | Test file |
+|------|-------|-----------|
+| `serializeBoardForClient` dates + `loop` boolean | unit | `serialize.test.ts` |
+| `getPlayingIds()` stable array reference | unit | `audio-manager.test.ts` |
+| Visibility saved correctly in DB | integration | `queries.test.ts` |
+| Visibility dropdown after save | e2e | `visibility.spec.ts` |
+| Board editor loads without client crash | e2e | `board.spec.ts` |
+| Upload creates clip row + file on disk | integration | `api-uploads.test.ts` |
+| Private vs public audio access | integration | `api-audio.test.ts` |
+
+## Agent workflow
+
+1. **Bug fix** → add a failing regression test first, then fix.
+2. **Lib / API / actions** → `npm run test`
+3. **Board editor / auth / upload UI** → `npm run test:all`
+4. **Docker or dependency changes** → `npm run test:all` + `npm run build`
+5. Do not skip tests when touching areas in the regression checklist.
+
+## Integration test notes
+
+- Use `resetDbForTests()` + isolated `DATABASE_URL` / `UPLOAD_DIR` per file (see `tests/helpers/db.ts`).
+- Mock `@/lib/auth` for route handler tests; set `auth()` return value per test case.
+- Run migrations once per test DB via `migrate()`.
+
+## E2E notes
+
+- Playwright starts the app via `webServer` in `playwright.config.ts` with a dedicated test DB.
+- Use unique emails per run (`test-${Date.now()}@example.com`) to avoid collisions.
+- Install browsers once: `npx playwright install chromium`
+- E2E fixtures are generated automatically via `e2e/global-setup.ts` (`npm run test:fixtures`)
+- Pin `@playwright/test` to `1.51.1` (matches Next.js peer); Docker e2e: `mcr.microsoft.com/playwright:v1.51.1-noble`

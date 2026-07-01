@@ -11,6 +11,10 @@ function resolveDatabaseUrl(): string {
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 
+export function resetDbForTests() {
+  _db = null;
+}
+
 export function getDb() {
   if (!_db) {
     const url = resolveDatabaseUrl();

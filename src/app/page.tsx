@@ -20,7 +20,7 @@ export default async function HomePage() {
             <Button variant="ghost" asChild>
               <Link href="/explore">Explore</Link>
             </Button>
-            {isLoggedIn ? (
+            {isLoggedIn && session ? (
               <>
                 <span className="hidden text-sm text-muted-foreground sm:inline">{session.user?.name}</span>
                 <Button variant="ghost" asChild>
