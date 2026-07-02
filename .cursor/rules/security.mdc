@@ -1,0 +1,83 @@
+---
+description: Security threat model, audit checklist, and remediation guidance for Awesome Soundboard
+alwaysApply: true
+---
+
+# Security — Awesome Soundboard
+
+Self-hosted multi-tenant soundboard. Users own boards and clips. Public/unlisted boards intentionally allow anonymous audio access by slug or clip ID.
+
+Full audit: [`docs/SECURITY-AUDIT.md`](../../docs/SECURITY-AUDIT.md)
+
+## Security surfaces
+
+| Area | Files |
+|------|-------|
+| Auth | `src/lib/auth/`, `src/middleware.ts`, `src/app/(auth)/` |
+| Server actions | `src/app/(app)/actions.ts` |
+| API routes | `src/app/api/uploads/`, `src/app/api/clips/[clipId]/audio/` |
+| File storage | `src/lib/storage/files.ts` |
+| Deploy | `docker-compose.yml`, `.env`, `src/instrumentation.ts` |
+
+## Authorization pattern (critical)
+
+`ensureOwner(boardId)` is **not enough** for clip/category mutations.
+
+Always verify the resource belongs to the board:
+
+```typescript
+const clip = await getClipByIdAndBoardId(clipId, boardId);
+if (!clip) throw new Error("Unauthorized");
+```
+
+Use board-scoped query helpers from `src/lib/db/queries.ts` before any update, delete, or reorder.
+
+## Upload rules
+
+- Require session + board ownership before write
+- Validate `categoryId` belongs to target board (`getCategoryByIdAndBoardId`)
+- Build file paths server-side (`buildClipFilePath`); never use raw client filenames in paths
+- Do not trust client MIME alone; extension allowlist required
+- `resolveClipAbsolutePath` must stay prefix-guarded against `..` traversal
+
+## Secrets
+
+- `AUTH_SECRET` required in production — app exits on startup if missing/placeholder
+- Never commit `.env`; Docker Compose reads from `.env` (no default fallback)
+- Set `NEXTAUTH_URL` to public HTTPS URL in production
+
+## Agent workflow
+
+Re-review security when changing:
+
+- Auth, middleware, or session handling
+- Server actions or API routes
+- Upload/storage path logic
+- Docker, env vars, or deployment config
+
+After security-related changes:
+
+1. Run `npm run test:integration` (access-control tests)
+2. Update `docs/SECURITY-AUDIT.md` if findings change
+3. For large diffs, use Security Review skill
+
+## Regression checklist
+
+| Area | Test |
+|------|------|
+| Clip/category IDOR blocked | `tests/integration/actions-idor.test.ts` |
+| Upload rejects foreign category | `tests/integration/api-uploads.test.ts` |
+| Path traversal blocked | `tests/unit/files.test.ts` |
+| Audio visibility (private/public) | `tests/integration/api-audio.test.ts` |
+| Upload requires auth | `tests/integration/api-uploads.test.ts` |
+
+## Deferred (tracked in audit doc)
+
+- Rate limiting on login/register/upload
+- CSP / HSTS / security headers
+- Stronger password policy (min length > 6)
+- Magic-byte upload validation
+- Disk cleanup on board delete
+- Dependabot / `npm audit` CI
+
+Do not reintroduce IDOR patterns or path traversal when adding features.

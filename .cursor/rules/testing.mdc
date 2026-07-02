@@ -46,6 +46,9 @@ Prefer testing pure logic first; add integration for DB/API; add E2E only for fu
 | Board editor loads without client crash | e2e | `board.spec.ts` |
 | Upload creates clip row + file on disk | integration | `api-uploads.test.ts` |
 | Private vs public audio access | integration | `api-audio.test.ts` |
+| Clip/category IDOR blocked | integration | `actions-idor.test.ts` |
+| Upload rejects foreign category | integration | `api-uploads.test.ts` |
+| Path traversal blocked | unit | `files.test.ts` |
 
 ## Agent workflow
 

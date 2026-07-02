@@ -6,7 +6,7 @@ services:
     volumes:
       - ./data:/app/data
     environment:
-      - AUTH_SECRET=${AUTH_SECRET:-change-me-in-production}
+      - AUTH_SECRET=${AUTH_SECRET}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - DATABASE_URL=file:/app/data/app.db
       - UPLOAD_DIR=/app/data/uploads

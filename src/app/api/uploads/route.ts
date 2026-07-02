@@ -6,6 +6,7 @@ import {
   getSoundboardById,
   createClip,
   getNextClipSortOrder,
+  getCategoryByIdAndBoardId,
 } from "@/lib/db/queries";
 import {
   buildClipFilePath,
@@ -45,6 +46,13 @@ export async function POST(req: NextRequest) {
 
   if (!isAllowedAudioFile(file.name, file.type)) {
     return NextResponse.json({ error: "Unsupported audio format" }, { status: 400 });
+  }
+
+  if (categoryId) {
+    const category = await getCategoryByIdAndBoardId(categoryId, boardId);
+    if (!category) {
+      return NextResponse.json({ error: "Invalid category" }, { status: 400 });
+    }
   }
 
   const clipId = newId();

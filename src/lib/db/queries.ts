@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, like, or, sql } from "drizzle-orm";
+import { eq, and, desc, asc, like, or, sql, inArray } from "drizzle-orm";
 import { getDb } from "./index";
 import { users, soundboards, categories, clips } from "./schema";
 import type { Soundboard, Clip, Category } from "./schema";
@@ -152,6 +152,24 @@ export async function deleteCategory(id: string) {
   await db.delete(categories).where(eq(categories.id, id));
 }
 
+export async function getCategoryByIdAndBoardId(categoryId: string, boardId: string) {
+  const db = getDb();
+  const [category] = await db
+    .select()
+    .from(categories)
+    .where(and(eq(categories.id, categoryId), eq(categories.soundboardId, boardId)));
+  return category ?? null;
+}
+
+export async function getCategoriesByIdsForBoard(categoryIds: string[], boardId: string) {
+  if (categoryIds.length === 0) return [];
+  const db = getDb();
+  return db
+    .select({ id: categories.id })
+    .from(categories)
+    .where(and(eq(categories.soundboardId, boardId), inArray(categories.id, categoryIds)));
+}
+
 export async function getClipsBySoundboardId(soundboardId: string, search?: string) {
   const db = getDb();
   const conditions = [eq(clips.soundboardId, soundboardId)];
@@ -170,6 +188,24 @@ export async function getClipById(id: string) {
   const db = getDb();
   const [clip] = await db.select().from(clips).where(eq(clips.id, id));
   return clip ?? null;
+}
+
+export async function getClipByIdAndBoardId(clipId: string, boardId: string) {
+  const db = getDb();
+  const [clip] = await db
+    .select()
+    .from(clips)
+    .where(and(eq(clips.id, clipId), eq(clips.soundboardId, boardId)));
+  return clip ?? null;
+}
+
+export async function getClipsByIdsForBoard(clipIds: string[], boardId: string) {
+  if (clipIds.length === 0) return [];
+  const db = getDb();
+  return db
+    .select({ id: clips.id })
+    .from(clips)
+    .where(and(eq(clips.soundboardId, boardId), inArray(clips.id, clipIds)));
 }
 
 export async function createClip(data: {

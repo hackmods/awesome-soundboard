@@ -1,5 +1,5 @@
 import { mkdirSync } from "fs";
-import { join, extname } from "path";
+import { join, extname, resolve, sep } from "path";
 
 const ALLOWED_EXTENSIONS = new Set([".mp3", ".wav", ".ogg", ".m4a", ".webm"]);
 const ALLOWED_MIMES = new Set([
@@ -26,7 +26,7 @@ export function getMaxUploadBytes(): number {
 export function isAllowedAudioFile(filename: string, mimeType: string): boolean {
   const ext = extname(filename).toLowerCase();
   if (!ALLOWED_EXTENSIONS.has(ext)) return false;
-  if (!mimeType || mimeType === "application/octet-stream") return true;
+  if (!mimeType || mimeType === "application/octet-stream") return false;
   return ALLOWED_MIMES.has(mimeType) || mimeType.startsWith("audio/");
 }
 
@@ -36,7 +36,12 @@ export function buildClipFilePath(userId: string, clipId: string, filename: stri
 }
 
 export function resolveClipAbsolutePath(relativePath: string): string {
-  return join(getUploadDir(), relativePath);
+  const base = resolve(getUploadDir());
+  const resolved = resolve(base, relativePath);
+  if (resolved !== base && !resolved.startsWith(base + sep)) {
+    throw new Error("Invalid clip path");
+  }
+  return resolved;
 }
 
 export function ensureUserUploadDir(userId: string): string {

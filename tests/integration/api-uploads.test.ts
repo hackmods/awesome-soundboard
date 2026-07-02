@@ -1,8 +1,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/uploads/route";
-import { getClipById } from "@/lib/db/queries";
+import { createCategory, getClipById } from "@/lib/db/queries";
 import { clearTestData, initTestDb, setupTestEnv } from "../helpers/db";
 import { createMinimalWavBuffer, createTestBoard, createTestUser } from "../helpers/fixtures";
+import { newId } from "@/lib/id";
 
 const { mockAuth } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
@@ -77,5 +78,28 @@ describe("POST /api/uploads", () => {
     const clip = await getClipById(body.id);
     expect(clip?.soundboardId).toBe(board.id);
     expect(clip?.userId).toBe(user.id);
+  });
+
+  it("rejects upload with categoryId from another board", async () => {
+    const user = await createTestUser();
+    const boardA = await createTestBoard(user.id);
+    const boardB = await createTestBoard(user.id);
+    const foreignCategoryId = newId();
+    await createCategory({ id: foreignCategoryId, soundboardId: boardB.id, name: "Other" });
+
+    mockAuth.mockResolvedValue({ user: { id: user.id, email: user.email, name: user.displayName } });
+
+    const formData = new FormData();
+    formData.append("boardId", boardA.id);
+    formData.append("categoryId", foreignCategoryId);
+    formData.append(
+      "file",
+      new File([createMinimalWavBuffer()], "clip.wav", { type: "audio/wav" })
+    );
+
+    const request = new Request("http://localhost/api/uploads", { method: "POST", body: formData });
+    const response = await POST(request as never);
+
+    expect(response.status).toBe(400);
   });
 });

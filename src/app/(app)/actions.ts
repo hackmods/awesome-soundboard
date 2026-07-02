@@ -15,6 +15,10 @@ import {
   updateClip,
   deleteClip,
   getHotkeyConflicts,
+  getClipByIdAndBoardId,
+  getClipsByIdsForBoard,
+  getCategoryByIdAndBoardId,
+  getCategoriesByIdsForBoard,
 } from "@/lib/db/queries";
 import { newId, resolveClipAbsolutePath } from "@/lib/storage/files";
 import { slugify } from "@/lib/utils";
@@ -125,12 +129,16 @@ export async function createCategoryAction(boardId: string, name: string) {
 
 export async function updateCategoryAction(categoryId: string, boardId: string, data: { name?: string; sortOrder?: number }) {
   await ensureOwner(boardId);
+  const category = await getCategoryByIdAndBoardId(categoryId, boardId);
+  if (!category) throw new Error("Unauthorized");
   await updateCategory(categoryId, data);
   revalidatePath(`/boards/${boardId}`);
 }
 
 export async function deleteCategoryAction(categoryId: string, boardId: string) {
   await ensureOwner(boardId);
+  const category = await getCategoryByIdAndBoardId(categoryId, boardId);
+  if (!category) throw new Error("Unauthorized");
   await deleteCategory(categoryId);
   revalidatePath(`/boards/${boardId}`);
 }
@@ -149,11 +157,19 @@ export async function updateClipAction(
 ) {
   await ensureOwner(boardId);
 
+  const clip = await getClipByIdAndBoardId(clipId, boardId);
+  if (!clip) throw new Error("Unauthorized");
+
   if (data.hotkey) {
     const conflicts = await getHotkeyConflicts(boardId, data.hotkey, clipId);
     if (conflicts.length > 0) {
       return { error: `Hotkey "${data.hotkey}" is already assigned.` };
     }
+  }
+
+  if (data.categoryId) {
+    const category = await getCategoryByIdAndBoardId(data.categoryId, boardId);
+    if (!category) throw new Error("Unauthorized");
   }
 
   await updateClip(clipId, data);
@@ -163,10 +179,12 @@ export async function updateClipAction(
 
 export async function deleteClipAction(clipId: string, boardId: string) {
   await ensureOwner(boardId);
-  const clip = await deleteClip(clipId);
-  if (clip) {
+  const clip = await getClipByIdAndBoardId(clipId, boardId);
+  if (!clip) throw new Error("Unauthorized");
+  const deleted = await deleteClip(clipId);
+  if (deleted) {
     try {
-      await unlink(resolveClipAbsolutePath(clip.filePath));
+      await unlink(resolveClipAbsolutePath(deleted.filePath));
     } catch {
       // file may already be gone
     }
@@ -177,6 +195,10 @@ export async function deleteClipAction(clipId: string, boardId: string) {
 
 export async function reorderClipsAction(boardId: string, orderedIds: string[]) {
   await ensureOwner(boardId);
+  const found = await getClipsByIdsForBoard(orderedIds, boardId);
+  if (found.length !== orderedIds.length) {
+    throw new Error("Unauthorized");
+  }
   for (let i = 0; i < orderedIds.length; i++) {
     await updateClip(orderedIds[i], { sortOrder: i });
   }
@@ -185,6 +207,10 @@ export async function reorderClipsAction(boardId: string, orderedIds: string[]) 
 
 export async function reorderCategoriesAction(boardId: string, orderedIds: string[]) {
   await ensureOwner(boardId);
+  const found = await getCategoriesByIdsForBoard(orderedIds, boardId);
+  if (found.length !== orderedIds.length) {
+    throw new Error("Unauthorized");
+  }
   for (let i = 0; i < orderedIds.length; i++) {
     await updateCategory(orderedIds[i], { sortOrder: i });
   }

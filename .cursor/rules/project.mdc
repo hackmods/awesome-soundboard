@@ -179,3 +179,7 @@ npm run test:all     # includes Playwright e2e
 ## Testing
 
 See [`.cursor/rules/testing.mdc`](.cursor/rules/testing.mdc) for when to run tests, regression checklist, and how to add new tests.
+
+## Security
+
+See [`.cursor/rules/security.mdc`](.cursor/rules/security.mdc) for threat model, authorization patterns, and audit checklist. Full report: [`docs/SECURITY-AUDIT.md`](../../docs/SECURITY-AUDIT.md).
