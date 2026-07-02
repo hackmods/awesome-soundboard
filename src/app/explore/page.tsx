@@ -4,9 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getPublicSoundboards } from "@/lib/db/queries";
 import { migrate } from "@/lib/db/migrate";
+import { signOut } from "@/lib/auth";
+import { getOptionalAuth } from "@/lib/auth/session";
 
 export default async function ExplorePage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   await migrate();
+  const session = await getOptionalAuth();
+  const isLoggedIn = Boolean(session?.user?.id);
   const params = await searchParams;
   const page = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
   const boards = await getPublicSoundboards(page);
@@ -20,12 +24,33 @@ export default async function ExplorePage({ searchParams }: { searchParams: Prom
             Awesome Soundboard
           </Link>
           <nav className="flex items-center gap-2">
-            <Button variant="ghost" asChild>
-              <Link href="/login">Log in</Link>
-            </Button>
-            <Button asChild>
-              <Link href="/register">Get started</Link>
-            </Button>
+            {isLoggedIn && session ? (
+              <>
+                <span className="hidden text-sm text-muted-foreground sm:inline">{session.user?.name}</span>
+                <Button variant="ghost" asChild>
+                  <Link href="/dashboard">Dashboard</Link>
+                </Button>
+                <form
+                  action={async () => {
+                    "use server";
+                    await signOut({ redirectTo: "/" });
+                  }}
+                >
+                  <Button variant="outline" type="submit">
+                    Sign out
+                  </Button>
+                </form>
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" asChild>
+                  <Link href="/login">Log in</Link>
+                </Button>
+                <Button asChild>
+                  <Link href="/register">Get started</Link>
+                </Button>
+              </>
+            )}
           </nav>
         </div>
       </header>
