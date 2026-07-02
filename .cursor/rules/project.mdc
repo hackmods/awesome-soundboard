@@ -187,3 +187,5 @@ See [`.cursor/rules/security.mdc`](.cursor/rules/security.mdc) for threat model,
 ## Git
 
 See [`.cursor/rules/git-workflow.mdc`](.cursor/rules/git-workflow.mdc) — commit and push by default after completing work on this project.
+
+CapRover deploy: [`docs/DEPLOY-CAPROVER.md`](../../docs/DEPLOY-CAPROVER.md) — secret format and 404 troubleshooting.
