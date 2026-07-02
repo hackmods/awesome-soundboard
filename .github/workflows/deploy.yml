@@ -12,6 +12,16 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Create deployment tarball
+        run: |
+          tar --exclude=node_modules \
+            --exclude=.git \
+            --exclude=data \
+            --exclude=.next \
+            --exclude=.github \
+            --exclude=deploy.tar \
+            -cvf deploy.tar .
+
       - name: Install CapRover CLI
         run: npm install -g caprover
 
@@ -20,4 +30,5 @@ jobs:
           caprover deploy \
             --caproverUrl "${{ secrets.CAPROVER_SERVER }}" \
             --appToken "${{ secrets.CAPROVER_APP_TOKEN }}" \
-            --appName "${{ secrets.CAPROVER_APP_NAME }}"
+            --appName "${{ secrets.CAPROVER_APP_NAME }}" \
+            --tarFile ./deploy.tar
