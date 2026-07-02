@@ -66,9 +66,6 @@ jobs:
           push: true
           tags: ${{ env.IMAGE }}
 
-      - name: Install CapRover CLI
-        run: npm install -g caprover
-
       - name: Deploy to CapRover
         env:
           CAPROVER_SERVER: ${{ secrets.CAPROVER_SERVER }}
@@ -77,29 +74,56 @@ jobs:
           CAPROVER_PASSWORD: ${{ secrets.CAPROVER_PASSWORD }}
           CAPROVER_OTP_TOKEN: ${{ secrets.CAPROVER_OTP_TOKEN }}
           IMAGE: ${{ env.IMAGE }}
-          NODE_TLS_REJECT_UNAUTHORIZED: "0"
         run: |
+          set -euo pipefail
+          trap 'echo "::error::Deploy failed at line $LINENO"' ERR
+
           SERVER="${CAPROVER_SERVER%/}"
           APP="$(echo "$CAPROVER_APP_NAME" | tr -d '[:space:]')"
-          CURL="curl -ksS"
+          CURL=(curl -ksS --fail-with-body)
+
+          echo "Deploying image ${IMAGE} to app ${APP} on ${SERVER}"
 
           api_json() {
             local label="$1"
             local body="$2"
             if ! echo "$body" | jq -e . >/dev/null 2>&1; then
-              echo "::error::${label} returned non-JSON (check CAPROVER_SERVER and TLS):"
-              echo "$body" | head -c 800
+              echo "::error::${label} returned non-JSON:"
+              echo "$body" | head -c 1000
               exit 1
             fi
             echo "$body"
           }
 
+          deploy_image() {
+            local header_name="$1"
+            local header_value="$2"
+            local def_content body response
+            def_content=$(jq -n --arg img "$IMAGE" '{schemaVersion: 2, imageName: $img} | tostring')
+            body=$(jq -n --arg content "$def_content" '{captainDefinitionContent: $content, gitHash: ""}')
+            echo "Posting image deploy to CapRover..."
+            response=$("${CURL[@]}" -X POST "${SERVER}/api/v2/user/apps/appData/${APP}?detached=1" \
+              -H "${header_name}: ${header_value}" \
+              -H "x-namespace: captain" \
+              -H "Content-Type: application/json" \
+              -d "$body")
+            response=$(api_json "CapRover image deploy" "$response")
+            echo "$response"
+            if ! echo "$response" | jq -e '.status == 100 or .status == 110' >/dev/null; then
+              echo "::error::CapRover image deploy was rejected."
+              exit 1
+            fi
+            echo "Deploy accepted by CapRover. Build may take a few minutes on the server."
+          }
+
           if [ -n "$CAPROVER_PASSWORD" ]; then
-            LOGIN_BODY=$(jq -n --arg password "$CAPROVER_PASSWORD" '{password: $password}')
+            echo "Logging in to CapRover..."
             if [ -n "$CAPROVER_OTP_TOKEN" ]; then
               LOGIN_BODY=$(jq -n --arg password "$CAPROVER_PASSWORD" --arg otp "$CAPROVER_OTP_TOKEN" '{password: $password, otpToken: $otp}')
+            else
+              LOGIN_BODY=$(jq -n --arg password "$CAPROVER_PASSWORD" '{password: $password}')
             fi
-            LOGIN_RESPONSE=$($CURL -X POST "${SERVER}/api/v2/login" \
+            LOGIN_RESPONSE=$("${CURL[@]}" -X POST "${SERVER}/api/v2/login" \
               -H "Content-Type: application/json" \
               -d "$LOGIN_BODY")
             LOGIN_RESPONSE=$(api_json "CapRover login" "$LOGIN_RESPONSE")
@@ -109,40 +133,37 @@ jobs:
               echo "$LOGIN_RESPONSE"
               exit 1
             fi
-            APPS_RESPONSE=$($CURL "${SERVER}/api/v2/user/apps/appDefinitions" \
+            echo "Login succeeded."
+
+            echo "Checking for existing app..."
+            APPS_RESPONSE=$("${CURL[@]}" "${SERVER}/api/v2/user/apps/appDefinitions" \
               -H "x-captain-auth: ${JWT}" \
               -H "x-namespace: captain")
             APPS_RESPONSE=$(api_json "CapRover app list" "$APPS_RESPONSE")
-            APPS=$(echo "$APPS_RESPONSE" | jq -r '.data.appDefinitions[].appName')
-            if ! echo "$APPS" | grep -qx "$APP"; then
+            APPS=$(echo "$APPS_RESPONSE" | jq -r '(.data.appDefinitions // []) | .[].appName')
+
+            if ! echo "$APPS" | grep -Fxq "$APP"; then
               echo "Creating CapRover app '${APP}'..."
               REGISTER_BODY=$(jq -n --arg app "$APP" '{appName: $app, hasPersistentData: true}')
-              RESPONSE=$($CURL -X POST "${SERVER}/api/v2/user/apps/appDefinitions/register" \
+              REGISTER_RESPONSE=$("${CURL[@]}" -X POST "${SERVER}/api/v2/user/apps/appDefinitions/register" \
                 -H "x-captain-auth: ${JWT}" \
                 -H "x-namespace: captain" \
                 -H "Content-Type: application/json" \
                 -d "$REGISTER_BODY")
-              RESPONSE=$(api_json "CapRover app register" "$RESPONSE")
-              echo "$RESPONSE"
-              if ! echo "$RESPONSE" | jq -e '.status == 100 or .status == 110' > /dev/null; then
+              REGISTER_RESPONSE=$(api_json "CapRover app register" "$REGISTER_RESPONSE")
+              echo "$REGISTER_RESPONSE"
+              if ! echo "$REGISTER_RESPONSE" | jq -e '.status == 100 or .status == 110' >/dev/null; then
                 echo "::error::Failed to create app '${APP}' on CapRover."
                 exit 1
               fi
             else
-              echo "App '${APP}' already exists on CapRover."
+              echo "App '${APP}' already exists."
             fi
-            if [ -n "$CAPROVER_OTP_TOKEN" ]; then
-              export CAPROVER_OTP_TOKEN
-            fi
-            caprover deploy \
-              --caproverUrl "$SERVER" \
-              --caproverPassword "$CAPROVER_PASSWORD" \
-              --appName "$APP" \
-              -i "$IMAGE"
+
+            deploy_image "x-captain-auth" "$JWT"
+          elif [ -n "$CAPROVER_APP_TOKEN" ]; then
+            deploy_image "x-captain-app-token" "$CAPROVER_APP_TOKEN"
           else
-            caprover deploy \
-              --caproverUrl "$SERVER" \
-              --appToken "$CAPROVER_APP_TOKEN" \
-              --appName "$APP" \
-              -i "$IMAGE"
+            echo "::error::Set CAPROVER_PASSWORD or CAPROVER_APP_TOKEN."
+            exit 1
           fi
