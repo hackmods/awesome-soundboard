@@ -11,13 +11,6 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
 
       - name: Install CapRover CLI
         run: npm install -g caprover
@@ -25,7 +18,6 @@ jobs:
       - name: Deploy to CapRover Instance
         run: |
           caprover deploy \
-            -h "${{ secrets.CAPROVER_SERVER }}" \
-            -t "${{ secrets.CAPROVER_APP_TOKEN }}" \
-            -a "${{ secrets.CAPROVER_APP_NAME }}" \
-            -b "main"
+            --caproverUrl "${{ secrets.CAPROVER_SERVER }}" \
+            --appToken "${{ secrets.CAPROVER_APP_TOKEN }}" \
+            --appName "${{ secrets.CAPROVER_APP_NAME }}"
