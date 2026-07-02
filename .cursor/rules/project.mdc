@@ -183,3 +183,7 @@ See [`.cursor/rules/testing.mdc`](.cursor/rules/testing.mdc) for when to run tes
 ## Security
 
 See [`.cursor/rules/security.mdc`](.cursor/rules/security.mdc) for threat model, authorization patterns, and audit checklist. Full report: [`docs/SECURITY-AUDIT.md`](../../docs/SECURITY-AUDIT.md).
+
+## Git
+
+See [`.cursor/rules/git-workflow.mdc`](.cursor/rules/git-workflow.mdc) — commit and push by default after completing work on this project.

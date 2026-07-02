@@ -1,0 +1,34 @@
+---
+description: Git workflow — commit and push by default after completing work
+alwaysApply: true
+---
+
+# Git workflow — Awesome Soundboard
+
+After completing a requested code or config change, **commit and push by default** unless the user explicitly says not to.
+
+## When to commit and push
+
+Do both after:
+- Bug fixes, features, or refactors
+- Cursor rule / docs / workflow updates
+- Any change the user asked to implement
+
+Skip commit/push only when the user says:
+- "don't commit", "no commit", "don't push", or similar
+- The task is read-only (questions, reviews, explanations only)
+
+## Commit protocol
+
+1. Run `git status`, `git diff`, and `git log -3 --oneline` before committing
+2. Stage only relevant files; never commit `.env` or secrets
+3. Write a concise message focused on **why** (1–2 sentences)
+4. Push to `origin` after a successful commit
+
+## PowerShell note
+
+This repo is developed on Windows. Use `;` instead of `&&` in shell commands, and pass multi-line commit messages with `-m` flags (heredocs are not supported in PowerShell).
+
+## Deploy side effect
+
+Pushing to `main` triggers the CapRover deploy workflow (`.github/workflows/deploy.yml`).
