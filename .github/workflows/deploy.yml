@@ -12,12 +12,20 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 🌟 CRUCIAL: This grabs all history so CapRover can find the commit hash
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install CapRover CLI
+        run: npm install -g caprover
 
       - name: Deploy to CapRover Instance
-        uses: caprover/deploy-from-github@main
-        with:
-          server: '${{ secrets.CAPROVER_SERVER }}'
-          token: '${{ secrets.CAPROVER_APP_TOKEN }}'
-          app: '${{ secrets.CAPROVER_APP_NAME }}'
-          branch: 'main'
+        run: |
+          caprover deploy \
+            -h "${{ secrets.CAPROVER_SERVER }}" \
+            -t "${{ secrets.CAPROVER_APP_TOKEN }}" \
+            -a "${{ secrets.CAPROVER_APP_NAME }}" \
+            -b "main"
