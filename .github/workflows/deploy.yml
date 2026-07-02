@@ -21,13 +21,18 @@ jobs:
           CAPROVER_SERVER: ${{ secrets.CAPROVER_SERVER }}
           CAPROVER_APP_NAME: ${{ secrets.CAPROVER_APP_NAME }}
           CAPROVER_APP_TOKEN: ${{ secrets.CAPROVER_APP_TOKEN }}
+          CAPROVER_PASSWORD: ${{ secrets.CAPROVER_PASSWORD }}
         run: |
-          if [ -z "$CAPROVER_SERVER" ] || [ -z "$CAPROVER_APP_NAME" ] || [ -z "$CAPROVER_APP_TOKEN" ]; then
-            echo "::error::CAPROVER_SERVER, CAPROVER_APP_NAME, and CAPROVER_APP_TOKEN secrets must all be set."
+          if [ -z "$CAPROVER_SERVER" ] || [ -z "$CAPROVER_APP_NAME" ]; then
+            echo "::error::CAPROVER_SERVER and CAPROVER_APP_NAME secrets must be set."
+            exit 1
+          fi
+          if [ -z "$CAPROVER_APP_TOKEN" ] && [ -z "$CAPROVER_PASSWORD" ]; then
+            echo "::error::Set CAPROVER_APP_TOKEN (recommended) or CAPROVER_PASSWORD for deploy auth."
             exit 1
           fi
           SERVER="${CAPROVER_SERVER%/}"
-          APP="${CAPROVER_APP_NAME}"
+          APP="$(echo "$CAPROVER_APP_NAME" | tr -d '[:space:]')"
           if [[ "$APP" == *"."* ]] || [[ "$APP" == *"://"* ]]; then
             echo "::error::CAPROVER_APP_NAME must be the short app name from CapRover (e.g. awesome-soundboard), not a URL or domain."
             exit 1
@@ -61,12 +66,54 @@ jobs:
           push: true
           tags: ${{ env.IMAGE }}
 
+      - name: Install CapRover CLI
+        run: npm install -g caprover
+
       - name: Deploy to CapRover
-        uses: caprover/deploy-from-github@v1.1.2
         env:
+          CAPROVER_SERVER: ${{ secrets.CAPROVER_SERVER }}
+          CAPROVER_APP_NAME: ${{ secrets.CAPROVER_APP_NAME }}
+          CAPROVER_APP_TOKEN: ${{ secrets.CAPROVER_APP_TOKEN }}
+          CAPROVER_PASSWORD: ${{ secrets.CAPROVER_PASSWORD }}
+          IMAGE: ${{ env.IMAGE }}
           NODE_TLS_REJECT_UNAUTHORIZED: "0"
-        with:
-          server: ${{ secrets.CAPROVER_SERVER }}
-          app: ${{ secrets.CAPROVER_APP_NAME }}
-          token: ${{ secrets.CAPROVER_APP_TOKEN }}
-          image: ${{ env.IMAGE }}
+        run: |
+          SERVER="${CAPROVER_SERVER%/}"
+          APP="$(echo "$CAPROVER_APP_NAME" | tr -d '[:space:]')"
+
+          if [ -n "$CAPROVER_PASSWORD" ]; then
+            JWT=$(curl -sS -X POST "${SERVER}/api/v2/login" \
+              -H "Content-Type: application/json" \
+              -d "{\"password\":\"${CAPROVER_PASSWORD}\"}" | jq -r '.data.token')
+            if [[ -z "$JWT" || "$JWT" == "null" ]]; then
+              echo "::error::CapRover login failed. Check CAPROVER_PASSWORD."
+              exit 1
+            fi
+            APPS=$(curl -sS "${SERVER}/api/v2/user/apps/appDefinitions" \
+              -H "x-captain-auth: ${JWT}" \
+              -H "x-namespace: captain" | jq -r '.data.appDefinitions[].appName')
+            if ! echo "$APPS" | grep -qx "$APP"; then
+              echo "Creating CapRover app '${APP}'..."
+              RESPONSE=$(curl -sS -X POST "${SERVER}/api/v2/user/apps/appDefinitions/register" \
+                -H "x-captain-auth: ${JWT}" \
+                -H "x-namespace: captain" \
+                -H "Content-Type: application/json" \
+                -d "{\"appName\":\"${APP}\",\"hasPersistentData\":true}")
+              echo "$RESPONSE"
+              if ! echo "$RESPONSE" | jq -e '.status == 100 or .status == 110' > /dev/null; then
+                echo "::error::Failed to create app '${APP}' on CapRover."
+                exit 1
+              fi
+            fi
+            caprover deploy \
+              --caproverUrl "$SERVER" \
+              --caproverPassword "$CAPROVER_PASSWORD" \
+              --appName "$APP" \
+              -i "$IMAGE"
+          else
+            caprover deploy \
+              --caproverUrl "$SERVER" \
+              --appToken "$CAPROVER_APP_TOKEN" \
+              --appName "$APP" \
+              -i "$IMAGE"
+          fi

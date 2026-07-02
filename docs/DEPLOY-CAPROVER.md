@@ -21,11 +21,14 @@ UPLOAD_DIR=/app/data/uploads
 
 ## GitHub secrets
 
-| Secret | Example | Notes |
-|--------|---------|-------|
-| `CAPROVER_SERVER` | `https://captain.apps.example.com` | CapRover **dashboard** URL (where you log in) |
-| `CAPROVER_APP_NAME` | `awesome-soundboard` | Exact app name from CapRover — not a URL |
-| `CAPROVER_APP_TOKEN` | (from Deployment tab) | Token for **that** app |
+| Secret | Required | Example | Notes |
+|--------|----------|---------|-------|
+| `CAPROVER_SERVER` | Yes | `https://captain.apps.example.com` | CapRover **dashboard** URL |
+| `CAPROVER_APP_NAME` | Yes | `awesome-soundboard` | Exact app name — not a URL |
+| `CAPROVER_APP_TOKEN` | Yes* | (Deployment tab) | App deploy token |
+| `CAPROVER_PASSWORD` | Optional | Captain password | Auto-creates app if missing; deploys with password auth |
+
+\* Use `CAPROVER_APP_TOKEN` **or** `CAPROVER_PASSWORD`. If the app does not exist yet, add `CAPROVER_PASSWORD` once — CI will create the app, then deploy.
 
 **Find `CAPROVER_SERVER`:** open the CapRover dashboard in your browser and copy that URL.
 
@@ -46,17 +49,14 @@ The workflow pushes to `ghcr.io/<owner>/<repo>`. CapRover must be able to pull i
 
 ## Troubleshooting
 
-### App tokens cannot be preflight-checked
-
-CapRover app tokens only allow **deploy** (POST), not read (GET). A GET to the API always returns 404 with an app token even when the app exists — this is normal.
-
 ### 404 "Nothing here yet" on deploy
 
-CapRover/nginx returned the default empty-app page instead of the API. Almost always:
+CapRover/nginx returned the default empty-app page instead of accepting the deploy. The app name in `CAPROVER_APP_NAME` **does not exist** on your CapRover server.
 
-1. **App not created** — create `awesome-soundboard` (or your chosen name) in CapRover first
-2. **Wrong app name** — `CAPROVER_APP_NAME` must match the CapRover app name exactly
-3. **Wrong token** — regenerate App Token on the correct app's Deployment tab
+**Fix (pick one):**
+
+1. **Manual:** CapRover dashboard → Apps → Create New App → name it exactly like `CAPROVER_APP_NAME` → Deployment → Enable App Token → update GitHub secrets.
+2. **Automatic:** Add GitHub secret `CAPROVER_PASSWORD` (your CapRover dashboard password). The workflow will create the app on first run, then deploy.
 
 ### Self-signed HTTPS
 
