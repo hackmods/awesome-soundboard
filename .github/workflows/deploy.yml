@@ -22,14 +22,20 @@ jobs:
             exit 1
           fi
           SERVER="${CAPROVER_SERVER%/}"
-          if [[ "$SERVER" != *"captain"* ]]; then
-            echo "::error::CAPROVER_SERVER must be your CapRover captain URL (e.g. https://captain.apps.example.com), not your app URL."
-            echo "Current value looks like an app or root domain — deploy API calls will return 404 'Nothing here yet'."
-            exit 1
-          fi
-          if [[ "$CAPROVER_APP_NAME" == *"."* ]] || [[ "$CAPROVER_APP_NAME" == *"://"* ]]; then
+          APP="${CAPROVER_APP_NAME}"
+          if [[ "$APP" == *"."* ]] || [[ "$APP" == *"://"* ]]; then
             echo "::error::CAPROVER_APP_NAME must be the short app name from CapRover (e.g. awesome-soundboard), not a full URL or domain."
             exit 1
+          fi
+          # Fail only when the server URL clearly points at the app site, not the CapRover dashboard.
+          if [[ "$SERVER" == *"://${APP}."* ]] || [[ "$SERVER" == *".${APP}."* ]]; then
+            echo "::error::CAPROVER_SERVER looks like your app URL (contains the app name). Use your CapRover dashboard URL instead."
+            echo "Open the CapRover UI in a browser — that URL is CAPROVER_SERVER (often https://captain.your-root-domain)."
+            exit 1
+          fi
+          if [[ "$SERVER" != *"captain"* ]]; then
+            echo "::warning::CAPROVER_SERVER does not contain 'captain'. That is OK for some installs (e.g. http://IP:3000)."
+            echo "Make sure this is your CapRover dashboard URL, not your app's public URL."
           fi
 
       - name: Create deployment tarball

@@ -12,9 +12,15 @@ Pushes to `main` deploy via `.github/workflows/deploy.yml`.
 
 | Secret | Example | Notes |
 |--------|---------|-------|
-| `CAPROVER_SERVER` | `https://captain.apps.example.com` | **Captain** dashboard URL — must contain `captain` in the hostname |
+| `CAPROVER_SERVER` | `https://captain.apps.example.com` | **CapRover dashboard URL** — the address you use to log into CapRover (not your app's public URL) |
 | `CAPROVER_APP_NAME` | `awesome-soundboard` | Short app name from CapRover — **not** a URL or domain |
 | `CAPROVER_APP_TOKEN` | (from Deployment tab) | App-specific deploy token |
+
+**How to find `CAPROVER_SERVER`:** open the CapRover dashboard in your browser and copy that URL exactly (scheme + host + port if any). Common forms:
+
+- `https://captain.apps.example.com`
+- `https://captain.example.com`
+- `http://203.0.113.10:3000` (initial install before HTTPS)
 
 ### Common mistake: 404 "Nothing here yet"
 
