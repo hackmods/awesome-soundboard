@@ -37,37 +37,6 @@ jobs:
             exit 1
           fi
 
-      - name: Preflight CapRover app and API
-        env:
-          CAPROVER_SERVER: ${{ secrets.CAPROVER_SERVER }}
-          CAPROVER_APP_NAME: ${{ secrets.CAPROVER_APP_NAME }}
-          CAPROVER_APP_TOKEN: ${{ secrets.CAPROVER_APP_TOKEN }}
-          NODE_TLS_REJECT_UNAUTHORIZED: "0"
-        run: |
-          SERVER="${CAPROVER_SERVER%/}"
-          APP="${CAPROVER_APP_NAME}"
-          URL="${SERVER}/api/v2/user/apps/appData/${APP}"
-          HTTP_CODE=$(curl -sS -o /tmp/caprover-preflight.txt -w "%{http_code}" \
-            -H "x-captain-auth: ${CAPROVER_APP_TOKEN}" \
-            -H "x-namespace: captain" \
-            "${URL}")
-          echo "GET ${URL} => HTTP ${HTTP_CODE}"
-          if grep -q "Nothing here yet" /tmp/caprover-preflight.txt; then
-            echo "::error::CapRover returned the nginx default page instead of the API."
-            echo "The app '${APP}' probably does not exist on CapRover, or the App Token belongs to a different app."
-            echo "In CapRover: create an app named exactly '${APP}', open Deployment, Enable App Token, update CAPROVER_APP_TOKEN."
-            exit 1
-          fi
-          if [[ "$HTTP_CODE" == "404" ]]; then
-            echo "::error::App '${APP}' not found on CapRover (HTTP 404)."
-            echo "Create the app in the CapRover dashboard with this exact name before deploying."
-            exit 1
-          fi
-          if [[ "$HTTP_CODE" != "200" ]]; then
-            echo "::warning::Unexpected preflight HTTP ${HTTP_CODE}. Continuing deploy anyway."
-            head -c 300 /tmp/caprover-preflight.txt || true
-          fi
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

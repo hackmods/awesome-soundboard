@@ -46,7 +46,11 @@ The workflow pushes to `ghcr.io/<owner>/<repo>`. CapRover must be able to pull i
 
 ## Troubleshooting
 
-### 404 "Nothing here yet"
+### App tokens cannot be preflight-checked
+
+CapRover app tokens only allow **deploy** (POST), not read (GET). A GET to the API always returns 404 with an app token even when the app exists — this is normal.
+
+### 404 "Nothing here yet" on deploy
 
 CapRover/nginx returned the default empty-app page instead of the API. Almost always:
 
