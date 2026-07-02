@@ -27,6 +27,7 @@ UPLOAD_DIR=/app/data/uploads
 | `CAPROVER_APP_NAME` | Yes | `awesome-soundboard` | Exact app name — not a URL |
 | `CAPROVER_APP_TOKEN` | Yes* | (Deployment tab) | App deploy token |
 | `CAPROVER_PASSWORD` | Optional | Captain password | Auto-creates app if missing; deploys with password auth |
+| `CAPROVER_OTP_TOKEN` | Optional | 2FA code | Required if CapRover dashboard has two-factor auth enabled |
 
 \* Use `CAPROVER_APP_TOKEN` **or** `CAPROVER_PASSWORD`. If the app does not exist yet, add `CAPROVER_PASSWORD` once — CI will create the app, then deploy.
 

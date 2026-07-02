@@ -75,35 +75,64 @@ jobs:
           CAPROVER_APP_NAME: ${{ secrets.CAPROVER_APP_NAME }}
           CAPROVER_APP_TOKEN: ${{ secrets.CAPROVER_APP_TOKEN }}
           CAPROVER_PASSWORD: ${{ secrets.CAPROVER_PASSWORD }}
+          CAPROVER_OTP_TOKEN: ${{ secrets.CAPROVER_OTP_TOKEN }}
           IMAGE: ${{ env.IMAGE }}
           NODE_TLS_REJECT_UNAUTHORIZED: "0"
         run: |
           SERVER="${CAPROVER_SERVER%/}"
           APP="$(echo "$CAPROVER_APP_NAME" | tr -d '[:space:]')"
+          CURL="curl -ksS"
 
-          if [ -n "$CAPROVER_PASSWORD" ]; then
-            JWT=$(curl -sS -X POST "${SERVER}/api/v2/login" \
-              -H "Content-Type: application/json" \
-              -d "{\"password\":\"${CAPROVER_PASSWORD}\"}" | jq -r '.data.token')
-            if [[ -z "$JWT" || "$JWT" == "null" ]]; then
-              echo "::error::CapRover login failed. Check CAPROVER_PASSWORD."
+          api_json() {
+            local label="$1"
+            local body="$2"
+            if ! echo "$body" | jq -e . >/dev/null 2>&1; then
+              echo "::error::${label} returned non-JSON (check CAPROVER_SERVER and TLS):"
+              echo "$body" | head -c 800
               exit 1
             fi
-            APPS=$(curl -sS "${SERVER}/api/v2/user/apps/appDefinitions" \
+            echo "$body"
+          }
+
+          if [ -n "$CAPROVER_PASSWORD" ]; then
+            LOGIN_BODY=$(jq -n --arg password "$CAPROVER_PASSWORD" '{password: $password}')
+            if [ -n "$CAPROVER_OTP_TOKEN" ]; then
+              LOGIN_BODY=$(jq -n --arg password "$CAPROVER_PASSWORD" --arg otp "$CAPROVER_OTP_TOKEN" '{password: $password, otpToken: $otp}')
+            fi
+            LOGIN_RESPONSE=$($CURL -X POST "${SERVER}/api/v2/login" \
+              -H "Content-Type: application/json" \
+              -d "$LOGIN_BODY")
+            LOGIN_RESPONSE=$(api_json "CapRover login" "$LOGIN_RESPONSE")
+            JWT=$(echo "$LOGIN_RESPONSE" | jq -r '.data.token')
+            if [[ -z "$JWT" || "$JWT" == "null" ]]; then
+              echo "::error::CapRover login failed. Check CAPROVER_PASSWORD (and CAPROVER_OTP_TOKEN if 2FA is enabled)."
+              echo "$LOGIN_RESPONSE"
+              exit 1
+            fi
+            APPS_RESPONSE=$($CURL "${SERVER}/api/v2/user/apps/appDefinitions" \
               -H "x-captain-auth: ${JWT}" \
-              -H "x-namespace: captain" | jq -r '.data.appDefinitions[].appName')
+              -H "x-namespace: captain")
+            APPS_RESPONSE=$(api_json "CapRover app list" "$APPS_RESPONSE")
+            APPS=$(echo "$APPS_RESPONSE" | jq -r '.data.appDefinitions[].appName')
             if ! echo "$APPS" | grep -qx "$APP"; then
               echo "Creating CapRover app '${APP}'..."
-              RESPONSE=$(curl -sS -X POST "${SERVER}/api/v2/user/apps/appDefinitions/register" \
+              REGISTER_BODY=$(jq -n --arg app "$APP" '{appName: $app, hasPersistentData: true}')
+              RESPONSE=$($CURL -X POST "${SERVER}/api/v2/user/apps/appDefinitions/register" \
                 -H "x-captain-auth: ${JWT}" \
                 -H "x-namespace: captain" \
                 -H "Content-Type: application/json" \
-                -d "{\"appName\":\"${APP}\",\"hasPersistentData\":true}")
+                -d "$REGISTER_BODY")
+              RESPONSE=$(api_json "CapRover app register" "$RESPONSE")
               echo "$RESPONSE"
               if ! echo "$RESPONSE" | jq -e '.status == 100 or .status == 110' > /dev/null; then
                 echo "::error::Failed to create app '${APP}' on CapRover."
                 exit 1
               fi
+            else
+              echo "App '${APP}' already exists on CapRover."
+            fi
+            if [ -n "$CAPROVER_OTP_TOKEN" ]; then
+              export CAPROVER_OTP_TOKEN
             fi
             caprover deploy \
               --caproverUrl "$SERVER" \
