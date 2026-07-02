@@ -26,6 +26,9 @@ jobs:
         run: npm install -g caprover
 
       - name: Deploy to CapRover Instance
+        env:
+          # Required when CapRover uses a self-signed HTTPS cert. Prefer Let's Encrypt on CapRover for production.
+          NODE_TLS_REJECT_UNAUTHORIZED: "0"
         run: |
           caprover deploy \
             --caproverUrl "${{ secrets.CAPROVER_SERVER }}" \
