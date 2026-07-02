@@ -4,6 +4,10 @@ on:
   push:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -16,43 +20,84 @@ jobs:
         env:
           CAPROVER_SERVER: ${{ secrets.CAPROVER_SERVER }}
           CAPROVER_APP_NAME: ${{ secrets.CAPROVER_APP_NAME }}
+          CAPROVER_APP_TOKEN: ${{ secrets.CAPROVER_APP_TOKEN }}
         run: |
-          if [ -z "$CAPROVER_SERVER" ] || [ -z "$CAPROVER_APP_NAME" ]; then
-            echo "::error::CAPROVER_SERVER and CAPROVER_APP_NAME secrets must be set."
+          if [ -z "$CAPROVER_SERVER" ] || [ -z "$CAPROVER_APP_NAME" ] || [ -z "$CAPROVER_APP_TOKEN" ]; then
+            echo "::error::CAPROVER_SERVER, CAPROVER_APP_NAME, and CAPROVER_APP_TOKEN secrets must all be set."
             exit 1
           fi
           SERVER="${CAPROVER_SERVER%/}"
           APP="${CAPROVER_APP_NAME}"
           if [[ "$APP" == *"."* ]] || [[ "$APP" == *"://"* ]]; then
-            echo "::error::CAPROVER_APP_NAME must be the short app name from CapRover (e.g. awesome-soundboard), not a full URL or domain."
+            echo "::error::CAPROVER_APP_NAME must be the short app name from CapRover (e.g. awesome-soundboard), not a URL or domain."
             exit 1
           fi
-          # Fail only when the server URL clearly points at the app site, not the CapRover dashboard.
           if [[ "$SERVER" == *"://${APP}."* ]] || [[ "$SERVER" == *".${APP}."* ]]; then
             echo "::error::CAPROVER_SERVER looks like your app URL (contains the app name). Use your CapRover dashboard URL instead."
-            echo "Open the CapRover UI in a browser — that URL is CAPROVER_SERVER (often https://captain.your-root-domain)."
             exit 1
           fi
-          if [[ "$SERVER" != *"captain"* ]]; then
-            echo "::warning::CAPROVER_SERVER does not contain 'captain'. That is OK for some installs (e.g. http://IP:3000)."
-            echo "Make sure this is your CapRover dashboard URL, not your app's public URL."
+
+      - name: Preflight CapRover app and API
+        env:
+          CAPROVER_SERVER: ${{ secrets.CAPROVER_SERVER }}
+          CAPROVER_APP_NAME: ${{ secrets.CAPROVER_APP_NAME }}
+          CAPROVER_APP_TOKEN: ${{ secrets.CAPROVER_APP_TOKEN }}
+          NODE_TLS_REJECT_UNAUTHORIZED: "0"
+        run: |
+          SERVER="${CAPROVER_SERVER%/}"
+          APP="${CAPROVER_APP_NAME}"
+          URL="${SERVER}/api/v2/user/apps/appData/${APP}"
+          HTTP_CODE=$(curl -sS -o /tmp/caprover-preflight.txt -w "%{http_code}" \
+            -H "x-captain-auth: ${CAPROVER_APP_TOKEN}" \
+            -H "x-namespace: captain" \
+            "${URL}")
+          echo "GET ${URL} => HTTP ${HTTP_CODE}"
+          if grep -q "Nothing here yet" /tmp/caprover-preflight.txt; then
+            echo "::error::CapRover returned the nginx default page instead of the API."
+            echo "The app '${APP}' probably does not exist on CapRover, or the App Token belongs to a different app."
+            echo "In CapRover: create an app named exactly '${APP}', open Deployment, Enable App Token, update CAPROVER_APP_TOKEN."
+            exit 1
+          fi
+          if [[ "$HTTP_CODE" == "404" ]]; then
+            echo "::error::App '${APP}' not found on CapRover (HTTP 404)."
+            echo "Create the app in the CapRover dashboard with this exact name before deploying."
+            exit 1
+          fi
+          if [[ "$HTTP_CODE" != "200" ]]; then
+            echo "::warning::Unexpected preflight HTTP ${HTTP_CODE}. Continuing deploy anyway."
+            head -c 300 /tmp/caprover-preflight.txt || true
           fi
 
-      - name: Create deployment tarball
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Preset image name
         run: |
-          tar --exclude=node_modules \
-            --exclude=.git \
-            --exclude=data \
-            --exclude=.next \
-            --exclude=.github \
-            --exclude=deploy.tar \
-            -cvf deploy.tar .
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+          TAG=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "IMAGE=ghcr.io/${OWNER}/${REPO}:${TAG}" >> "$GITHUB_ENV"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}
 
       - name: Deploy to CapRover
-        uses: caprover/deploy-from-github@v1.0.1
+        uses: caprover/deploy-from-github@v1.1.2
         env:
           NODE_TLS_REJECT_UNAUTHORIZED: "0"
         with:
           server: ${{ secrets.CAPROVER_SERVER }}
           app: ${{ secrets.CAPROVER_APP_NAME }}
           token: ${{ secrets.CAPROVER_APP_TOKEN }}
+          image: ${{ env.IMAGE }}
