@@ -78,9 +78,24 @@ jobs:
           set -euo pipefail
           trap 'echo "::error::Deploy failed at line $LINENO"' ERR
 
-          SERVER="${CAPROVER_SERVER%/}"
+          RAW_SERVER="${CAPROVER_SERVER%/}"
           APP="$(echo "$CAPROVER_APP_NAME" | tr -d '[:space:]')"
           CURL=(curl -ksS --fail-with-body)
+
+          # Normalize server URL the same way the CapRover CLI does:
+          # ensure the host is the captain admin subdomain.
+          PROTO="https"
+          case "$RAW_SERVER" in
+            http://*) PROTO="http"; HOST="${RAW_SERVER#http://}";;
+            https://*) PROTO="https"; HOST="${RAW_SERVER#https://}";;
+            *) HOST="$RAW_SERVER";;
+          esac
+          HOST="${HOST%%/*}"
+          case "$HOST" in
+            captain.*) ;;
+            *) HOST="captain.${HOST}";;
+          esac
+          SERVER="${PROTO}://${HOST}"
 
           echo "Deploying image ${IMAGE} to app ${APP} on ${SERVER}"
 
