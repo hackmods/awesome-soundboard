@@ -1,6 +1,6 @@
 # CapRover deployment (GitHub Actions)
 
-Pushes to `main` build a Docker image on GitHub Actions and deploy it to CapRover.
+Pushes to `main` upload the source as a tarball to CapRover, which builds the Docker image (from `captain-definition` + `Dockerfile`) and deploys it. No container registry is involved, so there are no image-pull permission issues.
 
 ## One-time CapRover setup
 
@@ -33,20 +33,11 @@ UPLOAD_DIR=/app/data/uploads
 
 **Find `CAPROVER_SERVER`:** open the CapRover dashboard in your browser and copy that URL.
 
-## GitHub Container Registry (required for image deploy)
+## How the build works
 
-The workflow pushes to `ghcr.io/<owner>/<repo>`. CapRover must be able to pull it:
+The workflow tars the repo (excluding `node_modules`, `.git`, `data`, `.next`) and POSTs it to CapRover's `appData` endpoint. CapRover reads `captain-definition`, builds the image with your `Dockerfile` on the server, then deploys it. Because CapRover builds locally, it never pulls from an external registry — this avoids `ghcr.io ... unauthorized` image-pull failures.
 
-**Option A (simplest):** After the first workflow run, open GitHub → **Packages** → your package → **Package settings** → change visibility to **Public**.
-
-**Option B (private package):** In CapRover → **Cluster** → **Docker Registry** add:
-
-| Field | Value |
-|-------|-------|
-| Domain | `ghcr.io` |
-| Username | Your GitHub username |
-| Password | GitHub PAT with `read:packages` |
-| Image Prefix | your-github-username (lowercase) |
+> Note: the build runs on your CapRover host, so it needs enough RAM for a Next.js production build (~1–2 GB). If builds OOM, increase server memory or add swap.
 
 ## Troubleshooting
 
@@ -61,7 +52,11 @@ CapRover/nginx returned the default empty-app page instead of accepting the depl
 
 ### Self-signed HTTPS
 
-CI sets `NODE_TLS_REJECT_UNAUTHORIZED=0` for self-signed captain certificates. Enable Let's Encrypt in CapRover for production.
+The workflow calls the CapRover API with `curl -k`, so self-signed captain certificates are accepted. Enable Let's Encrypt in CapRover for production.
+
+### Build fails / out of memory on the server
+
+The image is built on your CapRover host. A Next.js production build needs ~1–2 GB RAM. If the build is killed, add swap or increase the server's memory.
 
 ### Wrong server URL
 

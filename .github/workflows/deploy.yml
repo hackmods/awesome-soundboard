@@ -4,19 +4,15 @@ on:
   push:
     branches: [ "main" ]
 
-permissions:
-  contents: read
-  packages: write
-
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Validate CapRover secrets format
+      - name: Validate CapRover secrets
         env:
           CAPROVER_SERVER: ${{ secrets.CAPROVER_SERVER }}
           CAPROVER_APP_NAME: ${{ secrets.CAPROVER_APP_NAME }}
@@ -28,43 +24,25 @@ jobs:
             exit 1
           fi
           if [ -z "$CAPROVER_APP_TOKEN" ] && [ -z "$CAPROVER_PASSWORD" ]; then
-            echo "::error::Set CAPROVER_APP_TOKEN (recommended) or CAPROVER_PASSWORD for deploy auth."
+            echo "::error::Set CAPROVER_APP_TOKEN or CAPROVER_PASSWORD for deploy auth."
             exit 1
           fi
-          SERVER="${CAPROVER_SERVER%/}"
           APP="$(echo "$CAPROVER_APP_NAME" | tr -d '[:space:]')"
           if [[ "$APP" == *"."* ]] || [[ "$APP" == *"://"* ]]; then
-            echo "::error::CAPROVER_APP_NAME must be the short app name from CapRover (e.g. awesome-soundboard), not a URL or domain."
-            exit 1
-          fi
-          if [[ "$SERVER" == *"://${APP}."* ]] || [[ "$SERVER" == *".${APP}."* ]]; then
-            echo "::error::CAPROVER_SERVER looks like your app URL (contains the app name). Use your CapRover dashboard URL instead."
+            echo "::error::CAPROVER_APP_NAME must be the short app name (e.g. awesome-soundboard), not a URL."
             exit 1
           fi
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Preset image name
+      - name: Create deployment tarball
         run: |
-          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          REPO=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
-          TAG=$(echo "${{ github.sha }}" | cut -c1-7)
-          echo "IMAGE=ghcr.io/${OWNER}/${REPO}:${TAG}" >> "$GITHUB_ENV"
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ env.IMAGE }}
+          tar --exclude=node_modules \
+            --exclude=.git \
+            --exclude=data \
+            --exclude=.next \
+            --exclude=.github \
+            --exclude=deploy.tar \
+            -cf deploy.tar .
+          ls -lh deploy.tar
 
       - name: Deploy to CapRover
         env:
@@ -73,15 +51,13 @@ jobs:
           CAPROVER_APP_TOKEN: ${{ secrets.CAPROVER_APP_TOKEN }}
           CAPROVER_PASSWORD: ${{ secrets.CAPROVER_PASSWORD }}
           CAPROVER_OTP_TOKEN: ${{ secrets.CAPROVER_OTP_TOKEN }}
-          IMAGE: ${{ env.IMAGE }}
         run: |
           set -uo pipefail
 
           RAW_SERVER="${CAPROVER_SERVER%/}"
           APP="$(echo "$CAPROVER_APP_NAME" | tr -d '[:space:]')"
 
-          # Normalize server URL the same way the CapRover CLI does:
-          # ensure the host is the captain admin subdomain.
+          # Normalize to the captain admin subdomain, like the CapRover CLI does.
           PROTO="https"
           case "$RAW_SERVER" in
             http://*) PROTO="http"; HOST="${RAW_SERVER#http://}";;
@@ -95,10 +71,9 @@ jobs:
           esac
           SERVER="${PROTO}://${HOST}"
 
-          echo "Deploying image ${IMAGE} to app ${APP} on ${SERVER}"
+          echo "Deploying app '${APP}' from source tarball to ${SERVER}"
 
-          # capi METHOD URL [DATA] ; extra headers via CAPI_HEADERS array.
-          # Sets CAPI_STATUS and CAPI_BODY. Never aborts on HTTP error.
+          # capi METHOD URL [JSON_DATA]; extra headers via CAPI_HEADERS. Sets CAPI_STATUS/CAPI_BODY.
           capi() {
             local method="$1" url="$2" data="${3:-}"
             local out; out=$(mktemp)
@@ -113,46 +88,44 @@ jobs:
           }
 
           fail_response() {
-            local label="$1"
-            echo "::error::${label} failed (HTTP ${CAPI_STATUS})."
+            echo "::error::$1 failed (HTTP ${CAPI_STATUS})."
             if echo "$CAPI_BODY" | grep -q "Nothing here yet"; then
-              echo "CapRover returned the default nginx page, so ${SERVER}/api/v2 is not routing to the captain service."
-              echo "Confirm CAPROVER_SERVER is the dashboard URL and that any proxy in front forwards /api/v2 to CapRover."
+              echo "CapRover returned its default nginx page, so ${SERVER}/api/v2 is not routing to the captain service."
+              echo "Confirm CAPROVER_SERVER is the dashboard URL and any proxy forwards /api/v2 to CapRover."
             fi
             echo "--- response body (truncated) ---"
-            echo "$CAPI_BODY" | head -c 1000
-            echo ""
-            echo "---------------------------------"
+            echo "$CAPI_BODY" | head -c 1000; echo ""
             exit 1
           }
 
-          deploy_image() {
-            local def_content body
-            def_content=$(jq -n --arg img "$IMAGE" '{schemaVersion: 2, imageName: $img} | tostring')
-            body=$(jq -n --arg content "$def_content" '{captainDefinitionContent: $content, gitHash: ""}')
-            echo "Posting image deploy to CapRover..."
-            capi POST "${SERVER}/api/v2/user/apps/appData/${APP}?detached=1" "$body"
+          upload_tarball() {
+            local out; out=$(mktemp)
+            echo "Uploading source tarball (CapRover will build the image)..."
+            CAPI_STATUS=$(curl -ksS -o "$out" -w '%{http_code}' \
+              -X POST "${SERVER}/api/v2/user/apps/appData/${APP}?detached=1" \
+              "${CAPI_HEADERS[@]}" \
+              -F "sourceFile=@deploy.tar" \
+              -F "gitHash=${GITHUB_SHA:-}" || echo "000")
+            CAPI_BODY=$(cat "$out"); rm -f "$out"
             if [ "$CAPI_STATUS" != "200" ] || ! echo "$CAPI_BODY" | jq -e '.status == 100 or .status == 110' >/dev/null 2>&1; then
-              fail_response "CapRover image deploy"
+              fail_response "CapRover tarball deploy"
             fi
-            echo "Deploy accepted. CapRover will pull ${IMAGE} and restart the app (this can take a few minutes)."
+            echo "Upload accepted. CapRover is building and deploying the app (this can take several minutes)."
           }
 
           if [ -n "$CAPROVER_PASSWORD" ]; then
             echo "Logging in to CapRover..."
             CAPI_HEADERS=()
             if [ -n "$CAPROVER_OTP_TOKEN" ]; then
-              LOGIN_BODY=$(jq -n --arg password "$CAPROVER_PASSWORD" --arg otp "$CAPROVER_OTP_TOKEN" '{password: $password, otpToken: $otp}')
+              LOGIN_BODY=$(jq -n --arg p "$CAPROVER_PASSWORD" --arg o "$CAPROVER_OTP_TOKEN" '{password:$p, otpToken:$o}')
             else
-              LOGIN_BODY=$(jq -n --arg password "$CAPROVER_PASSWORD" '{password: $password}')
+              LOGIN_BODY=$(jq -n --arg p "$CAPROVER_PASSWORD" '{password:$p}')
             fi
             capi POST "${SERVER}/api/v2/login" "$LOGIN_BODY"
-            if [ "$CAPI_STATUS" != "200" ]; then
-              fail_response "CapRover login"
-            fi
+            [ "$CAPI_STATUS" = "200" ] || fail_response "CapRover login"
             JWT=$(echo "$CAPI_BODY" | jq -r '.data.token // empty')
             if [ -z "$JWT" ]; then
-              echo "::error::CapRover login returned no token. Check CAPROVER_PASSWORD (and CAPROVER_OTP_TOKEN if 2FA is on)."
+              echo "::error::Login returned no token. Check CAPROVER_PASSWORD (and CAPROVER_OTP_TOKEN if 2FA is on)."
               echo "$CAPI_BODY" | head -c 1000
               exit 1
             fi
@@ -162,28 +135,21 @@ jobs:
 
             echo "Checking for existing app..."
             capi GET "${SERVER}/api/v2/user/apps/appDefinitions"
-            if [ "$CAPI_STATUS" != "200" ]; then
-              fail_response "CapRover app list"
-            fi
+            [ "$CAPI_STATUS" = "200" ] || fail_response "CapRover app list"
             APPS=$(echo "$CAPI_BODY" | jq -r '(.data.appDefinitions // []) | .[].appName')
 
             if ! echo "$APPS" | grep -Fxq "$APP"; then
               echo "Creating CapRover app '${APP}'..."
-              REGISTER_BODY=$(jq -n --arg app "$APP" '{appName: $app, hasPersistentData: true}')
+              REGISTER_BODY=$(jq -n --arg a "$APP" '{appName:$a, hasPersistentData:true}')
               capi POST "${SERVER}/api/v2/user/apps/appDefinitions/register" "$REGISTER_BODY"
-              if [ "$CAPI_STATUS" != "200" ] || ! echo "$CAPI_BODY" | jq -e '.status == 100 or .status == 110' >/dev/null 2>&1; then
-                fail_response "CapRover app register"
-              fi
+              { [ "$CAPI_STATUS" = "200" ] && echo "$CAPI_BODY" | jq -e '.status == 100 or .status == 110' >/dev/null 2>&1; } || fail_response "CapRover app register"
               echo "App '${APP}' created."
             else
               echo "App '${APP}' already exists."
             fi
 
-            deploy_image
-          elif [ -n "$CAPROVER_APP_TOKEN" ]; then
-            CAPI_HEADERS=(-H "x-captain-app-token: ${CAPROVER_APP_TOKEN}" -H "x-namespace: captain")
-            deploy_image
+            upload_tarball
           else
-            echo "::error::Set CAPROVER_PASSWORD or CAPROVER_APP_TOKEN."
-            exit 1
+            CAPI_HEADERS=(-H "x-captain-app-token: ${CAPROVER_APP_TOKEN}" -H "x-namespace: captain")
+            upload_tarball
           fi
