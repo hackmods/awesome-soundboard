@@ -115,7 +115,7 @@ jobs:
 
           if [ -n "$CAPROVER_PASSWORD" ]; then
             echo "Logging in to CapRover..."
-            CAPI_HEADERS=()
+            CAPI_HEADERS=(-H "x-namespace: captain")
             if [ -n "$CAPROVER_OTP_TOKEN" ]; then
               LOGIN_BODY=$(jq -n --arg p "$CAPROVER_PASSWORD" --arg o "$CAPROVER_OTP_TOKEN" '{password:$p, otpToken:$o}')
             else
