@@ -21,17 +21,21 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN groupadd --system --gid 1001 nodejs \
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends gosu \
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd --system --gid 1001 nodejs \
   && useradd --system --uid 1001 --gid nodejs nextjs
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/drizzle ./drizzle
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
-RUN mkdir -p /app/data/uploads && chown -R nextjs:nodejs /app/data
-
-USER nextjs
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
+  && mkdir -p /app/data/uploads \
+  && chown -R nextjs:nodejs /app/data
 
 EXPOSE 3000
 ENV PORT=3000
@@ -39,4 +43,5 @@ ENV HOSTNAME="0.0.0.0"
 ENV DATABASE_URL=file:/app/data/app.db
 ENV UPLOAD_DIR=/app/data/uploads
 
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "server.js"]

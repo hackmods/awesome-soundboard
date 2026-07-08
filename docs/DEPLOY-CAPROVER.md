@@ -70,13 +70,15 @@ The app name in `CAPROVER_APP_NAME` does not exist on your CapRover server. Crea
 
 ### 502 Bad Gateway after a successful deploy
 
-The image built and deployed, but CapRover/nginx cannot reach the running container. Check these in order:
+**Build logs showing "Build has finished successfully!" only mean the image built.** A 502 means the running container is not responding — check **App Logs** (not Build Logs) in the CapRover dashboard.
+
+Check these in order:
 
 1. **Container HTTP Port** — App Configs → HTTP Settings → set **Container HTTP Port** to `3000`, then save and restart the app. (Most common cause.)
-2. **`AUTH_SECRET`** — must be set in App Configs → Environment Variables. The app **exits on startup** in production if it is missing or still a placeholder (`change-me-in-production`). Generate one with `openssl rand -base64 32`.
-3. **App logs** — CapRover dashboard → your app → **App Logs**. Look for `AUTH_SECRET must be set` or `EACCES` / port bind errors.
+2. **`AUTH_SECRET`** — must be set in App Configs → Environment Variables. The app **exits on startup** in production if it is missing or still a placeholder (`change-me-in-production`). Generate one with `openssl rand -base64 32`. App Logs will show `FATAL: AUTH_SECRET must be set...`.
+3. **App logs** — CapRover dashboard → your app → **App Logs** (runtime output from `node server.js`, not the Docker build). Look for `FATAL: AUTH_SECRET`, `EACCES`, or crash stack traces.
 4. **`NEXTAUTH_URL`** — set to your public app URL (e.g. `https://awesome-soundboard.behind7proxies.com`), not the captain URL.
-5. **Persistent data** — confirm `/app/data` is enabled so SQLite and uploads can be written.
+5. **Persistent data** — confirm `/app/data` is enabled. The Docker entrypoint fixes volume permissions on each start.
 
 Quick health check once the port is correct: `curl https://<your-app-domain>/api/health` should return `{"status":"ok",...}`.
 
