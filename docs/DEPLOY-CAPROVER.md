@@ -1,6 +1,6 @@
 # CapRover deployment (GitHub Actions)
 
-Pushes to `main` build a Docker image on GitHub Actions, push it to GitHub Container Registry (GHCR), and deploy it to CapRover with the CapRover CLI — same flow as `math-minute`.
+Pushes to `master` build a Docker image on GitHub Actions, push it to GitHub Container Registry (GHCR), and deploy it to CapRover with the CapRover CLI — same flow as `math-minute`.
 
 ## One-time CapRover setup
 

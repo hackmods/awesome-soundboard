@@ -31,4 +31,4 @@ This repo is developed on Windows. Use `;` instead of `&&` in shell commands, an
 
 ## Deploy side effect
 
-Pushing to `main` triggers the CapRover deploy workflow (`.github/workflows/deploy.yml`).
+Pushing to `master` triggers the CapRover deploy workflow (`.github/workflows/deploy.yml`).
