@@ -1,6 +1,6 @@
 # CapRover deployment (GitHub Actions)
 
-Pushes to `main` upload the source as a tarball to CapRover, which builds the Docker image (from `captain-definition` + `Dockerfile`) and deploys it. No container registry is involved, so there are no image-pull permission issues.
+Pushes to `main` build a Docker image on GitHub Actions, push it to GitHub Container Registry (GHCR), and deploy it to CapRover with the CapRover CLI — same flow as `math-minute`.
 
 ## One-time CapRover setup
 
@@ -23,46 +23,50 @@ UPLOAD_DIR=/app/data/uploads
 
 | Secret | Required | Example | Notes |
 |--------|----------|---------|-------|
-| `CAPROVER_SERVER` | Yes | `https://captain.apps.example.com` | CapRover **dashboard** URL |
+| `CAPROVER_SERVER` | Yes | `https://captain.behind7proxies.com` | CapRover **dashboard** URL |
 | `CAPROVER_APP_NAME` | Yes | `awesome-soundboard` | Exact app name — not a URL |
-| `CAPROVER_APP_TOKEN` | Yes* | (Deployment tab) | App deploy token |
-| `CAPROVER_PASSWORD` | Optional | Captain password | Auto-creates app if missing; deploys with password auth |
-| `CAPROVER_OTP_TOKEN` | Optional | 2FA code | Required if CapRover dashboard has two-factor auth enabled |
+| `CAPROVER_APP_TOKEN` | Yes | (Deployment tab) | App deploy token |
 
-\* Use `CAPROVER_APP_TOKEN` **or** `CAPROVER_PASSWORD`. If the app does not exist yet, add `CAPROVER_PASSWORD` once — CI will create the app, then deploy.
+**Find `CAPROVER_SERVER`:** open the CapRover dashboard in your browser and copy that URL (e.g. `https://captain.behind7proxies.com`).
 
-**Find `CAPROVER_SERVER`:** open the CapRover dashboard in your browser and copy that URL.
+## GitHub Container Registry
 
-## How the build works
+The workflow pushes to `ghcr.io/<owner>/awesome-soundboard` with tags `latest` and the commit SHA. CapRover must be able to pull that image.
 
-The workflow tars the repo (excluding `node_modules`, `.git`, `data`, `.next`) and POSTs it to CapRover's `appData` endpoint. CapRover reads `captain-definition`, builds the image with your `Dockerfile` on the server, then deploys it. Because CapRover builds locally, it never pulls from an external registry — this avoids `ghcr.io ... unauthorized` image-pull failures.
+If the package is **private**, add GHCR credentials in CapRover → **Cluster** → **Docker Registry Configuration**:
 
-> Note: the build runs on your CapRover host, so it needs enough RAM for a Next.js production build (~1–2 GB). If builds OOM, increase server memory or add swap.
+| Field | Value |
+|-------|-------|
+| Registry Domain | `ghcr.io` |
+| Username | Your GitHub username |
+| Password | GitHub PAT with `read:packages` |
+
+Alternatively, make the package **public** in GitHub → Packages → package settings.
+
+## How the deploy works
+
+1. GitHub Actions builds the image from `Dockerfile` and pushes to GHCR.
+2. `caprover deploy --imageName ghcr.io/...` tells CapRover to pull that image and restart the app.
 
 ## Troubleshooting
 
+### `unauthorized` when pulling from ghcr.io
+
+CapRover cannot pull the private GHCR image. Add registry credentials in CapRover (see above) or make the package public.
+
 ### 404 "Nothing here yet" on deploy
 
-CapRover/nginx returned the default empty-app page instead of accepting the deploy. The app name in `CAPROVER_APP_NAME` **does not exist** on your CapRover server.
-
-**Fix (pick one):**
-
-1. **Manual:** CapRover dashboard → Apps → Create New App → name it exactly like `CAPROVER_APP_NAME` → Deployment → Enable App Token → update GitHub secrets.
-2. **Automatic:** Add GitHub secret `CAPROVER_PASSWORD` (your CapRover dashboard password). The workflow will create the app on first run, then deploy.
-
-### Self-signed HTTPS
-
-The workflow calls the CapRover API with `curl -k`, so self-signed captain certificates are accepted. Enable Let's Encrypt in CapRover for production.
-
-### Build fails / out of memory on the server
-
-The image is built on your CapRover host. A Next.js production build needs ~1–2 GB RAM. If the build is killed, add swap or increase the server's memory.
+The app name in `CAPROVER_APP_NAME` does not exist on your CapRover server. Create the app in the dashboard with that exact name and enable an app token.
 
 ### Wrong server URL
 
 | Wrong (`CAPROVER_SERVER`) | Right |
 |---------------------------|-------|
-| `https://awesome-soundboard.apps.example.com` | `https://captain.apps.example.com` |
+| `https://awesome-soundboard.behind7proxies.com` | `https://captain.behind7proxies.com` |
 | Your app's public URL | CapRover dashboard URL |
 
 `NEXTAUTH_URL` uses the **app** URL; `CAPROVER_SERVER` uses the **captain** URL.
+
+### Self-signed HTTPS
+
+If the CapRover CLI fails with a certificate error, enable Let's Encrypt in CapRover or set `NODE_TLS_REJECT_UNAUTHORIZED=0` on the deploy step (not recommended for production).
