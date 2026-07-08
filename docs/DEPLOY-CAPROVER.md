@@ -18,6 +18,7 @@ UPLOAD_DIR=/app/data/uploads
 ```
 
 4. Enable **Persistent Directories** for `/app/data` so the database and uploads survive redeploys
+5. Set **Container HTTP Port** to `3000` (App Configs → HTTP Settings → Container HTTP Port). CapRover defaults to port 80; this app listens on 3000.
 
 ## GitHub secrets
 
@@ -66,6 +67,18 @@ The app name in `CAPROVER_APP_NAME` does not exist on your CapRover server. Crea
 | Your app's public URL | CapRover dashboard URL |
 
 `NEXTAUTH_URL` uses the **app** URL; `CAPROVER_SERVER` uses the **captain** URL.
+
+### 502 Bad Gateway after a successful deploy
+
+The image built and deployed, but CapRover/nginx cannot reach the running container. Check these in order:
+
+1. **Container HTTP Port** — App Configs → HTTP Settings → set **Container HTTP Port** to `3000`, then save and restart the app. (Most common cause.)
+2. **`AUTH_SECRET`** — must be set in App Configs → Environment Variables. The app **exits on startup** in production if it is missing or still a placeholder (`change-me-in-production`). Generate one with `openssl rand -base64 32`.
+3. **App logs** — CapRover dashboard → your app → **App Logs**. Look for `AUTH_SECRET must be set` or `EACCES` / port bind errors.
+4. **`NEXTAUTH_URL`** — set to your public app URL (e.g. `https://awesome-soundboard.behind7proxies.com`), not the captain URL.
+5. **Persistent data** — confirm `/app/data` is enabled so SQLite and uploads can be written.
+
+Quick health check once the port is correct: `curl https://<your-app-domain>/api/health` should return `{"status":"ok",...}`.
 
 ### Self-signed HTTPS
 
